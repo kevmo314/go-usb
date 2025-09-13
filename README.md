@@ -33,38 +33,31 @@ package main
 import (
     "fmt"
     "log"
-    
+
     usb "github.com/kevmo314/go-usb"
 )
 
 func main() {
-    // Create a new USB context
-    ctx, err := usb.NewContext()
+    // Get list of USB devices (no context needed!)
+    devices, err := usb.GetDeviceList()
     if err != nil {
         log.Fatal(err)
     }
-    defer ctx.Close()
-    
-    // Get list of USB devices
-    devices, err := ctx.GetDeviceList()
-    if err != nil {
-        log.Fatal(err)
-    }
-    
+
     // Print all devices
     for _, dev := range devices {
         fmt.Printf("Device: Bus %03d Address %03d VID:PID %04x:%04x\n",
             dev.Bus, dev.Address,
             dev.Descriptor.VendorID, dev.Descriptor.ProductID)
     }
-    
+
     // Open a specific device by VID/PID
-    handle, err := ctx.OpenDevice(0x1234, 0x5678)
+    handle, err := usb.OpenDevice(0x1234, 0x5678)
     if err != nil {
         log.Fatal(err)
     }
     defer handle.Close()
-    
+
     // Perform operations with the device...
 }
 ```
@@ -74,10 +67,7 @@ func main() {
 ### Enumerate Devices
 
 ```go
-ctx, _ := usb.NewContext()
-defer ctx.Close()
-
-devices, _ := ctx.GetDeviceList()
+devices, _ := usb.GetDeviceList()
 for _, dev := range devices {
     desc := dev.Descriptor
     fmt.Printf("VID: %04x, PID: %04x\n", desc.VendorID, desc.ProductID)
@@ -87,7 +77,13 @@ for _, dev := range devices {
 ### Open Device and Read String Descriptors
 
 ```go
-handle, _ := ctx.OpenDevice(vendorID, productID)
+// Open device by VID/PID
+handle, _ := usb.OpenDevice(vendorID, productID)
+defer handle.Close()
+
+// Or open a specific device from the list
+devices, _ := usb.GetDeviceList()
+handle, _ := devices[0].Open()
 defer handle.Close()
 
 // Get manufacturer string
@@ -198,6 +194,23 @@ Then reload udev:
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 ```
+
+## Included Tools
+
+The repository includes several command-line tools and examples in the `cmd/` directory:
+
+- **lsusb**: List USB devices (similar to the system lsusb command)
+  ```bash
+  go run cmd/lsusb/main.go       # List all devices
+  go run cmd/lsusb/main.go -v     # Verbose output
+  go run cmd/lsusb/main.go -t     # Tree view
+  go run cmd/lsusb/main.go -s :6  # Show device 6 on any bus
+  go run cmd/lsusb/main.go -s 1:6 # Show device 6 on bus 1
+  ```
+
+- **browse-msc**: Browse USB Mass Storage devices
+- **browse-uvc**: Browse USB Video Class devices
+- **verify-transfers**: Test and verify USB transfer operations
 
 ## Limitations
 
