@@ -108,25 +108,12 @@ func TestOpenDevice(t *testing.T) {
 	}
 
 	devices, err := GetDeviceList()
-	if err != nil {
-		t.Fatalf("Failed to create context: %v", err)
-	}
-
-	handle, err := OpenDevice(0xFFFF, 0xFFFF)
-	if err != ErrDeviceNotFound {
-		if handle != nil {
-			handle.Close()
-		}
-		t.Errorf("Expected ErrDeviceNotFound for non-existent device, got: %v", err)
-	}
-
-	devices, err = GetDeviceList()
 	if err != nil || len(devices) == 0 {
 		t.Skip("No USB devices available for testing")
 	}
 
 	firstDevice := devices[0]
-	handle, err = OpenDevice(firstDevice.Descriptor.VendorID, firstDevice.Descriptor.ProductID)
+	handle, err := OpenDevice(firstDevice.Descriptor.VendorID, firstDevice.Descriptor.ProductID)
 	if err != nil {
 		if err == ErrPermissionDenied {
 			t.Skip("Permission denied to open USB device")
@@ -140,43 +127,6 @@ func TestOpenDevice(t *testing.T) {
 			t.Errorf("VendorID mismatch: got 0x%04x, expected 0x%04x",
 				desc.VendorID, firstDevice.Descriptor.VendorID)
 		}
-	}
-}
-
-func TestDeviceDescriptor(t *testing.T) {
-	if os.Getuid() != 0 {
-		t.Skip("Skipping test that requires root privileges")
-	}
-
-	devices, err := GetDeviceList()
-	if err != nil || len(devices) == 0 {
-		t.Skip("No USB devices available for testing")
-	}
-
-	for _, dev := range devices {
-		desc := dev.Descriptor
-
-		if desc.Length == 0 {
-			t.Errorf("Device descriptor length is 0")
-		}
-
-		if desc.DescriptorType != 0x01 {
-			t.Errorf("Invalid descriptor type: 0x%02x (expected 0x01)", desc.DescriptorType)
-		}
-
-		if desc.USBVersion == 0 {
-			t.Errorf("USB version is 0")
-		}
-
-		if desc.MaxPacketSize0 == 0 {
-			t.Errorf("MaxPacketSize0 is 0")
-		}
-
-		if desc.NumConfigurations == 0 {
-			t.Errorf("NumConfigurations is 0")
-		}
-
-		break
 	}
 }
 

@@ -342,28 +342,6 @@ type usbBulkTransfer struct {
 	Data     uintptr
 }
 
-type usbURB struct {
-	Type         uint8
-	Endpoint     uint8
-	Status       int32
-	Flags        uint32
-	Buffer       uintptr
-	Length       int32
-	ActualLength int32
-	StartFrame   int32
-	StreamID     uint32
-	ErrorCount   int32
-	SignalNr     uint32
-	Userdata     uintptr
-	IsoFrames    [0]usbIsoPacketDesc
-}
-
-type usbIsoPacketDesc struct {
-	Length       uint32
-	ActualLength uint32
-	Status       int32
-}
-
 func (h *DeviceHandle) ReadConfigDescriptor(configIndex uint8) (*ConfigDescriptor, []InterfaceDescriptor, []EndpointDescriptor, error) {
 	buf := make([]byte, 512)
 

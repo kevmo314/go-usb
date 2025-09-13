@@ -99,7 +99,7 @@ type DeviceDescriptor struct {
 	NumConfigurations uint8
 }
 
-type ConfigDescriptor struct {
+type RawConfigDescriptor struct {
 	Length             uint8
 	DescriptorType     uint8
 	TotalLength        uint16
@@ -213,7 +213,7 @@ type Device struct {
 	Bus          uint8
 	Address      uint8
 	Descriptor   DeviceDescriptor
-	Configs      []ConfigDescriptor
+	Configs      []RawConfigDescriptor
 	sysfsStrings *SysfsStrings
 
 	handle *DeviceHandle
@@ -403,8 +403,24 @@ func (h *DeviceHandle) SetConfiguration(config int) error {
 	return nil
 }
 
-// GetConfigDescriptorByValue gets the raw configuration descriptor data by index
-func (h *DeviceHandle) GetConfigDescriptorByValue(index uint8) ([]byte, error) {
+// GetConfigDescriptorByValue gets the parsed configuration descriptor by index
+// This is equivalent to libusb_get_config_descriptor
+func (h *DeviceHandle) GetConfigDescriptorByValue(index uint8) (*ConfigDescriptor, error) {
+	data, err := h.GetRawConfigDescriptor(index)
+	if err != nil {
+		return nil, err
+	}
+
+	config := &ConfigDescriptor{}
+	err = config.Unmarshal(data)
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+// GetRawConfigDescriptor gets the raw configuration descriptor data by index
+func (h *DeviceHandle) GetRawConfigDescriptor(index uint8) ([]byte, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -897,14 +913,207 @@ func (h *DeviceHandle) FreeStreams(endpoints []uint8) error {
 	return nil
 }
 
+// GetSSEndpointCompanionDescriptor gets the SuperSpeed endpoint companion descriptor for a given endpoint
+// This is equivalent to libusb_get_ss_endpoint_companion_descriptor
+func (h *DeviceHandle) GetSSEndpointCompanionDescriptor(configIndex uint8, interfaceNumber uint8, altSetting uint8, endpointAddress uint8) (*SuperSpeedEndpointCompanionDescriptor, error) {
+	config, err := h.GetConfigDescriptorByValue(configIndex)
+	if err != nil {
+		return nil, err
+	}
+
+	altSettingDesc := config.GetInterfaceAltSetting(interfaceNumber, altSetting)
+	if altSettingDesc == nil {
+		return nil, fmt.Errorf("interface %d alt setting %d not found", interfaceNumber, altSetting)
+	}
+
+	// Find the endpoint and return its companion descriptor if present
+	for i := range altSettingDesc.Endpoints {
+		if altSettingDesc.Endpoints[i].EndpointAddr == endpointAddress {
+			if altSettingDesc.Endpoints[i].SSCompanion != nil {
+				return altSettingDesc.Endpoints[i].SSCompanion, nil
+			}
+			// Search through extra data if companion wasn't parsed
+			extra := altSettingDesc.Endpoints[i].Extra
+			pos := 0
+			for pos+2 <= len(extra) {
+				length := int(extra[pos])
+				descType := extra[pos+1]
+
+				if length < 2 || pos+length > len(extra) {
+					break
+				}
+
+				if descType == USB_DT_SS_ENDPOINT_COMPANION {
+					if length < 6 {
+						return nil, fmt.Errorf("invalid SS endpoint companion descriptor length: %d", length)
+					}
+					return &SuperSpeedEndpointCompanionDescriptor{
+						Length:           extra[pos],
+						DescriptorType:   extra[pos+1],
+						MaxBurst:         extra[pos+2],
+						Attributes:       extra[pos+3],
+						BytesPerInterval: binary.LittleEndian.Uint16(extra[pos+4 : pos+6]),
+					}, nil
+				}
+
+				pos += length
+			}
+			return nil, fmt.Errorf("SS endpoint companion descriptor not found for endpoint %02x", endpointAddress)
+		}
+	}
+
+	return nil, fmt.Errorf("endpoint %02x not found", endpointAddress)
+}
+
+// GetSSUSBDeviceCapabilityDescriptor gets the SuperSpeed USB device capability descriptor
+// This is equivalent to libusb_get_ss_usb_device_capability_descriptor
+func (h *DeviceHandle) GetSSUSBDeviceCapabilityDescriptor() (*SuperSpeedUSBCapability, error) {
+	// Read the full BOS descriptor once
+	buf := make([]byte, 1024) // Start with reasonable size
+	n, err := h.GetRawDescriptor(USB_DT_BOS, 0, 0, buf)
+	if err != nil || n < 5 {
+		return nil, fmt.Errorf("failed to read BOS descriptor: %w", err)
+	}
+
+	// Resize buffer to actual data read
+	buf = buf[:n]
+
+	// Parse BOS header
+	if buf[1] != USB_DT_BOS {
+		return nil, fmt.Errorf("not a BOS descriptor")
+	}
+
+	totalLength := binary.LittleEndian.Uint16(buf[2:4])
+	if int(totalLength) > n {
+		// Need to read more data
+		buf = make([]byte, totalLength)
+		n, err = h.GetRawDescriptor(USB_DT_BOS, 0, 0, buf)
+		if err != nil || n < int(totalLength) {
+			return nil, fmt.Errorf("failed to read full BOS descriptor: %w", err)
+		}
+		buf = buf[:n]
+	}
+
+	numDevCaps := buf[4]
+	pos := 5 // Start after BOS header
+
+	// Look for SuperSpeed USB capability (type 0x03)
+	for i := 0; i < int(numDevCaps) && pos < len(buf); i++ {
+		if pos+3 > len(buf) {
+			break
+		}
+
+		length := int(buf[pos])
+		descType := buf[pos+1]
+		devCapType := buf[pos+2]
+
+		if length < 3 || pos+length > len(buf) {
+			break
+		}
+
+		if descType == USB_DT_DEVICE_CAPABILITY && devCapType == 0x03 {
+			// Found SuperSpeed USB capability
+			if length < 10 {
+				return nil, fmt.Errorf("invalid SuperSpeed USB capability length: %d", length)
+			}
+
+			return &SuperSpeedUSBCapability{
+				Length:                 buf[pos],
+				DescriptorType:         buf[pos+1],
+				DevCapabilityType:      buf[pos+2],
+				Attributes:             buf[pos+3],
+				SpeedsSupported:        binary.LittleEndian.Uint16(buf[pos+4 : pos+6]),
+				FunctionalitySupported: buf[pos+6],
+				U1DevExitLat:           buf[pos+7],
+				U2DevExitLat:           binary.LittleEndian.Uint16(buf[pos+8 : pos+10]),
+			}, nil
+		}
+
+		pos += length
+	}
+
+	return nil, fmt.Errorf("SuperSpeed USB capability not found")
+}
+
+// GetUSB20ExtensionDescriptor gets the USB 2.0 extension descriptor
+// This is equivalent to libusb_get_usb_2_0_extension_descriptor
+func (h *DeviceHandle) GetUSB20ExtensionDescriptor() (*USB2ExtensionCapability, error) {
+	// Read the full BOS descriptor once
+	buf := make([]byte, 1024) // Start with reasonable size
+	n, err := h.GetRawDescriptor(USB_DT_BOS, 0, 0, buf)
+	if err != nil || n < 5 {
+		return nil, fmt.Errorf("failed to read BOS descriptor: %w", err)
+	}
+
+	// Resize buffer to actual data read
+	buf = buf[:n]
+
+	// Parse BOS header
+	if buf[1] != USB_DT_BOS {
+		return nil, fmt.Errorf("not a BOS descriptor")
+	}
+
+	totalLength := binary.LittleEndian.Uint16(buf[2:4])
+	if int(totalLength) > n {
+		// Need to read more data
+		buf = make([]byte, totalLength)
+		n, err = h.GetRawDescriptor(USB_DT_BOS, 0, 0, buf)
+		if err != nil || n < int(totalLength) {
+			return nil, fmt.Errorf("failed to read full BOS descriptor: %w", err)
+		}
+		buf = buf[:n]
+	}
+
+	numDevCaps := buf[4]
+	pos := 5 // Start after BOS header
+
+	// Look for USB 2.0 extension capability (type 0x02)
+	for i := 0; i < int(numDevCaps) && pos < len(buf); i++ {
+		if pos+3 > len(buf) {
+			break
+		}
+
+		length := int(buf[pos])
+		descType := buf[pos+1]
+		devCapType := buf[pos+2]
+
+		if length < 3 || pos+length > len(buf) {
+			break
+		}
+
+		if descType == USB_DT_DEVICE_CAPABILITY && devCapType == 0x02 {
+			// Found USB 2.0 extension capability
+			if length < 7 {
+				return nil, fmt.Errorf("invalid USB 2.0 extension capability length: %d", length)
+			}
+
+			return &USB2ExtensionCapability{
+				Length:            buf[pos],
+				DescriptorType:    buf[pos+1],
+				DevCapabilityType: buf[pos+2],
+				Attributes:        binary.LittleEndian.Uint32(buf[pos+3 : pos+7]),
+			}, nil
+		}
+
+		pos += length
+	}
+
+	return nil, fmt.Errorf("USB 2.0 extension capability not found")
+}
+
 // ReadBOSDescriptor reads the Binary Object Store descriptor (USB 3.0+)
 func (h *DeviceHandle) ReadBOSDescriptor() (*BOSDescriptor, []DeviceCapabilityDescriptor, error) {
 	// First, get the BOS descriptor header
-	buf := make([]byte, 5) // BOS descriptor is 5 bytes
+	buf := make([]byte, 5) // BOS descriptor header is 5 bytes
 
 	n, err := h.GetRawDescriptor(USB_DT_BOS, 0, 0, buf)
 	if err != nil || n < 5 {
 		return nil, nil, fmt.Errorf("failed to read BOS descriptor: %w", err)
+	}
+
+	// Validate descriptor type
+	if buf[1] != USB_DT_BOS {
+		return nil, nil, fmt.Errorf("not a BOS descriptor (type: 0x%02x)", buf[1])
 	}
 
 	bos := &BOSDescriptor{
@@ -913,6 +1122,12 @@ func (h *DeviceHandle) ReadBOSDescriptor() (*BOSDescriptor, []DeviceCapabilityDe
 		TotalLength:    binary.LittleEndian.Uint16(buf[2:4]),
 		NumDeviceCaps:  buf[4],
 	}
+
+	// Validate total length is reasonable (not too small)
+	if bos.TotalLength < 5 {
+		return nil, nil, fmt.Errorf("invalid BOS total length: %d", bos.TotalLength)
+	}
+	// Note: TotalLength is uint16, so max value is 65535
 
 	// Now read the full BOS descriptor with all capabilities
 	fullBuf := make([]byte, bos.TotalLength)
@@ -930,6 +1145,16 @@ func (h *DeviceHandle) ReadBOSDescriptor() (*BOSDescriptor, []DeviceCapabilityDe
 			break
 		}
 
+		length := int(fullBuf[pos])
+
+		// Validate descriptor length
+		if length < 3 {
+			break // Invalid descriptor length
+		}
+		if pos+length > len(fullBuf) {
+			break // Descriptor extends beyond buffer
+		}
+
 		cap := DeviceCapabilityDescriptor{
 			Length:            fullBuf[pos],
 			DescriptorType:    fullBuf[pos+1],
@@ -937,7 +1162,7 @@ func (h *DeviceHandle) ReadBOSDescriptor() (*BOSDescriptor, []DeviceCapabilityDe
 		}
 
 		caps = append(caps, cap)
-		pos += int(cap.Length)
+		pos += length
 	}
 
 	return bos, caps, nil
@@ -1067,7 +1292,7 @@ func WrapSysDevice(fd int) (*DeviceHandle, error) {
 	ctrl := usbCtrlRequest{
 		RequestType: 0x80,
 		Request:     USB_REQ_GET_DESCRIPTOR,
-		Value:       (USB_DT_DEVICE << 8) | 0,
+		Value:       USB_DT_DEVICE << 8,
 		Index:       0,
 		Length:      18,
 		Data:        unsafe.Pointer(&buf[0]),

@@ -104,9 +104,7 @@ func (h *DeviceHandle) NewIsochronousTransfer(endpoint uint8, numPackets int, pa
 	// Copy packet descriptors after URB struct
 	isoPackets := (*[1 << 16]IsoPacketDescriptor)(unsafe.Pointer(
 		uintptr(unsafe.Pointer(&urbBuffer[0])) + unsafe.Sizeof(URB{})))
-	for i := range packets {
-		isoPackets[i] = packets[i]
-	}
+	copy(isoPackets[:len(packets)], packets)
 
 	return &IsochronousTransfer{
 		handle:     h,
