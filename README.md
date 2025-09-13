@@ -39,7 +39,7 @@ import (
 
 func main() {
     // Get list of USB devices (no context needed!)
-    devices, err := usb.GetDeviceList()
+    devices, err := usb.DeviceList()
     if err != nil {
         log.Fatal(err)
     }
@@ -67,7 +67,7 @@ func main() {
 ### Enumerate Devices
 
 ```go
-devices, _ := usb.GetDeviceList()
+devices, _ := usb.DeviceList()
 for _, dev := range devices {
     desc := dev.Descriptor
     fmt.Printf("VID: %04x, PID: %04x\n", desc.VendorID, desc.ProductID)
@@ -82,16 +82,16 @@ handle, _ := usb.OpenDevice(vendorID, productID)
 defer handle.Close()
 
 // Or open a specific device from the list
-devices, _ := usb.GetDeviceList()
+devices, _ := usb.DeviceList()
 handle, _ := devices[0].Open()
 defer handle.Close()
 
 // Get manufacturer string
-manufacturer, _ := handle.GetStringDescriptor(desc.ManufacturerIndex)
+manufacturer, _ := handle.StringDescriptor(desc.ManufacturerIndex)
 fmt.Printf("Manufacturer: %s\n", manufacturer)
 
 // Get product string
-product, _ := handle.GetStringDescriptor(desc.ProductIndex)
+product, _ := handle.StringDescriptor(desc.ProductIndex)
 fmt.Printf("Product: %s\n", product)
 ```
 
@@ -157,9 +157,9 @@ transfer := usb.NewTransfer(handle, 0x81, usb.TransferTypeInterrupt, 64)
 
 // Set callback
 transfer.SetCallback(func(t *usb.Transfer) {
-    if t.GetStatus() == usb.TransferCompleted {
-        data := t.GetBuffer()
-        fmt.Printf("Received %d bytes\n", t.GetActualLength())
+    if t.Status() == usb.TransferCompleted {
+        data := t.Buffer()
+        fmt.Printf("Received %d bytes\n", t.ActualLength())
     }
 })
 

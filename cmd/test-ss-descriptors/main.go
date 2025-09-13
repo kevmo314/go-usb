@@ -16,7 +16,7 @@ func main() {
 	fmt.Println("SuperSpeed Descriptor Test")
 	fmt.Println("==========================")
 
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Fatalf("Failed to get device list: %v", err)
 	}
@@ -39,7 +39,7 @@ func main() {
 		defer handle.Close()
 
 		// Test device speed
-		if speed, err := handle.GetSpeed(); err == nil {
+		if speed, err := handle.Speed(); err == nil {
 			speedNames := map[uint8]string{
 				1: "Low Speed",
 				2: "Full Speed",
@@ -82,14 +82,14 @@ func main() {
 			}
 
 			// Test specific capability getters
-			if usb20ext, err := handle.GetUSB20ExtensionDescriptor(); err == nil {
+			if usb20ext, err := handle.USB20ExtensionDescriptor(); err == nil {
 				fmt.Printf("  USB 2.0 Extension found: Attributes=0x%08x\n", usb20ext.Attributes)
 				if usb20ext.Attributes&0x02 != 0 {
 					fmt.Println("    - Link Power Management (LPM) supported")
 				}
 			}
 
-			if ssUsb, err := handle.GetSSUSBDeviceCapabilityDescriptor(); err == nil {
+			if ssUsb, err := handle.SSUSBDeviceCapabilityDescriptor(); err == nil {
 				fmt.Printf("  SuperSpeed USB Capability found:\n")
 				fmt.Printf("    - Speeds: 0x%04x\n", ssUsb.SpeedsSupported)
 				fmt.Printf("    - U1 Exit Latency: %d µs\n", ssUsb.U1DevExitLat)
@@ -111,7 +111,7 @@ func testSSDescriptors(handle *usb.DeviceHandle) {
 	fmt.Println("  Testing SuperSpeed descriptors...")
 
 	// Get first configuration
-	config, err := handle.GetConfigDescriptorByValue(0)
+	config, err := handle.ConfigDescriptorByValue(0)
 	if err != nil {
 		fmt.Printf("    Error getting config: %v\n", err)
 		return
@@ -123,7 +123,7 @@ func testSSDescriptors(handle *usb.DeviceHandle) {
 		for _, altSetting := range iface.AltSettings {
 			for _, endpoint := range altSetting.Endpoints {
 				// Try to get SS companion descriptor
-				companion, err := handle.GetSSEndpointCompanionDescriptor(
+				companion, err := handle.SSEndpointCompanionDescriptor(
 					0, altSetting.InterfaceNumber,
 					altSetting.AlternateSetting,
 					endpoint.EndpointAddr,

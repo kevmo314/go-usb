@@ -18,7 +18,7 @@ func main() {
 	fmt.Println("=================================")
 
 	// Get device list
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Fatalf("Failed to get device list: %v", err)
 	}
@@ -91,8 +91,8 @@ func testDeviceDescriptors(devices []*usb.Device) bool {
 			continue
 		}
 
-		vendorName := usb.GetVendorName(desc.VendorID)
-		productName := usb.GetProductName(desc.VendorID, desc.ProductID)
+		vendorName := usb.VendorName(desc.VendorID)
+		productName := usb.ProductName(desc.VendorID, desc.ProductID)
 
 		fmt.Printf("   Device %d: ✅ %04x:%04x %s %s\n", i, desc.VendorID, desc.ProductID, vendorName, productName)
 		passed++

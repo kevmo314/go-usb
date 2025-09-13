@@ -238,8 +238,8 @@ func (c *ConfigDescriptor) Unmarshal(data []byte) error {
 
 // Helper methods for ConfigDescriptor
 
-// GetInterface returns the interface with the given number, or nil if not found
-func (c *ConfigDescriptor) GetInterface(interfaceNumber uint8) *Interface {
+// Interface returns the interface with the given number, or nil if not found
+func (c *ConfigDescriptor) Interface(interfaceNumber uint8) *Interface {
 	for i := range c.Interfaces {
 		if len(c.Interfaces[i].AltSettings) > 0 &&
 			c.Interfaces[i].AltSettings[0].InterfaceNumber == interfaceNumber {
@@ -249,9 +249,9 @@ func (c *ConfigDescriptor) GetInterface(interfaceNumber uint8) *Interface {
 	return nil
 }
 
-// GetInterfaceAltSetting returns a specific alternate setting for an interface
-func (c *ConfigDescriptor) GetInterfaceAltSetting(interfaceNumber, altSetting uint8) *InterfaceAltSetting {
-	iface := c.GetInterface(interfaceNumber)
+// InterfaceAltSetting returns a specific alternate setting for an interface
+func (c *ConfigDescriptor) InterfaceAltSetting(interfaceNumber, altSetting uint8) *InterfaceAltSetting {
+	iface := c.Interface(interfaceNumber)
 	if iface == nil {
 		return nil
 	}
@@ -288,12 +288,12 @@ func (e *Endpoint) IsOutput() bool {
 	return (e.EndpointAddr & 0x80) == 0
 }
 
-// GetEndpointNumber returns the endpoint number (without direction bit)
-func (e *Endpoint) GetEndpointNumber() uint8 {
+// EndpointNumber returns the endpoint number (without direction bit)
+func (e *Endpoint) EndpointNumber() uint8 {
 	return e.EndpointAddr & 0x0F
 }
 
-// GetTransferType returns the transfer type (Control, Isochronous, Bulk, or Interrupt)
-func (e *Endpoint) GetTransferType() uint8 {
-	return e.Attributes & 0x03
+// TransferType returns the transfer type (Control, Isochronous, Bulk, or Interrupt)
+func (e *Endpoint) TransferType() TransferType {
+	return TransferType(e.Attributes & 0x03)
 }

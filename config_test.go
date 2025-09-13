@@ -50,8 +50,8 @@ func TestConfigDescriptorUnmarshal(t *testing.T) {
 				if !ep1.IsInput() {
 					t.Error("Endpoint[0] should be IN endpoint")
 				}
-				if ep1.GetTransferType() != 2 { // Bulk transfer type
-					t.Errorf("Endpoint[0] transfer type = %d, want bulk", ep1.GetTransferType())
+				if ep1.TransferType() != 2 { // Bulk transfer type
+					t.Errorf("Endpoint[0] transfer type = %d, want bulk", ep1.TransferType())
 				}
 				ep2 := alt.Endpoints[1]
 				if ep2.EndpointAddr != 0x02 {
@@ -97,8 +97,8 @@ func TestConfigDescriptorUnmarshal(t *testing.T) {
 				}
 				// Check isochronous endpoint
 				ep := c.Interfaces[1].AltSettings[1].Endpoints[0]
-				if ep.GetTransferType() != 1 { // Isochronous transfer type
-					t.Errorf("Endpoint transfer type = %d, want isochronous", ep.GetTransferType())
+				if ep.TransferType() != 1 { // Isochronous transfer type
+					t.Errorf("Endpoint transfer type = %d, want isochronous", ep.TransferType())
 				}
 			},
 		},
@@ -212,36 +212,36 @@ func TestConfigDescriptorHelpers(t *testing.T) {
 	}
 
 	t.Run("GetInterface", func(t *testing.T) {
-		iface := c.GetInterface(0)
+		iface := c.Interface(0)
 		if iface == nil {
 			t.Error("GetInterface(0) returned nil")
 		}
-		iface = c.GetInterface(1)
+		iface = c.Interface(1)
 		if iface == nil {
 			t.Error("GetInterface(1) returned nil")
 		}
-		iface = c.GetInterface(2)
+		iface = c.Interface(2)
 		if iface != nil {
 			t.Error("GetInterface(2) should return nil")
 		}
 	})
 
 	t.Run("GetInterfaceAltSetting", func(t *testing.T) {
-		alt := c.GetInterfaceAltSetting(1, 0)
+		alt := c.InterfaceAltSetting(1, 0)
 		if alt == nil {
 			t.Error("GetInterfaceAltSetting(1, 0) returned nil")
 		} else if alt.AlternateSetting != 0 {
 			t.Errorf("Wrong alt setting: %d", alt.AlternateSetting)
 		}
 
-		alt = c.GetInterfaceAltSetting(1, 1)
+		alt = c.InterfaceAltSetting(1, 1)
 		if alt == nil {
 			t.Error("GetInterfaceAltSetting(1, 1) returned nil")
 		} else if alt.AlternateSetting != 1 {
 			t.Errorf("Wrong alt setting: %d", alt.AlternateSetting)
 		}
 
-		alt = c.GetInterfaceAltSetting(1, 2)
+		alt = c.InterfaceAltSetting(1, 2)
 		if alt != nil {
 			t.Error("GetInterfaceAltSetting(1, 2) should return nil")
 		}
@@ -341,11 +341,11 @@ func TestEndpointHelpers(t *testing.T) {
 			if got := tt.endpoint.IsOutput(); got != tt.wantOut {
 				t.Errorf("IsOutput() = %v, want %v", got, tt.wantOut)
 			}
-			if got := tt.endpoint.GetEndpointNumber(); got != tt.wantNum {
+			if got := tt.endpoint.EndpointNumber(); got != tt.wantNum {
 				t.Errorf("GetEndpointNumber() = %d, want %d", got, tt.wantNum)
 			}
-			if got := tt.endpoint.GetTransferType(); got != tt.wantType {
-				t.Errorf("GetTransferType() = %d, want %d", got, tt.wantType)
+			if got := tt.endpoint.TransferType(); got != TransferType(tt.wantType) {
+				t.Errorf("TransferType() = %d, want %d", got, tt.wantType)
 			}
 		})
 	}

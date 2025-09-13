@@ -58,7 +58,7 @@ func main() {
 }
 
 func findOTGDevices() []*usb.Device {
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Printf("Failed to get device list: %v", err)
 		return nil
@@ -124,7 +124,7 @@ func analyzeOTGDevice(dev *usb.Device) {
 	}
 
 	// Check device status for OTG indicators
-	if status, err := handle.GetStatus(0x80, 0); err == nil {
+	if status, err := handle.Status(0x80, 0); err == nil {
 		selfPowered := (status & 0x01) != 0
 		remoteWakeup := (status & 0x02) != 0
 
@@ -142,7 +142,7 @@ func analyzeOTGDevice(dev *usb.Device) {
 func readOTGDescriptor(handle *usb.DeviceHandle) *usb.OTGDescriptor {
 	buf := make([]byte, 5) // OTG descriptor can be 3-5 bytes
 
-	n, err := handle.GetRawDescriptor(usb.USB_DT_OTG, 0, 0, buf)
+	n, err := handle.RawDescriptor(usb.USB_DT_OTG, 0, 0, buf)
 	if err != nil || n < 3 {
 		return nil
 	}
@@ -180,7 +180,7 @@ func demoOTGFeatures(handle *usb.DeviceHandle) {
 }
 
 func analyzeOTGConfigurations(handle *usb.DeviceHandle) {
-	device := handle.GetDevice()
+	device := handle.Device()
 	numConfigs := device.Descriptor.NumConfigurations
 
 	if numConfigs > 1 {
@@ -227,7 +227,7 @@ func classifyOTGRole(class, subclass uint8) string {
 }
 
 func findAltModeDevices() []*usb.Device {
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		return nil
 	}
@@ -330,7 +330,7 @@ func getCapabilityName(capType uint8) string {
 
 func analyzeAltModeCapabilities(handle *usb.DeviceHandle) {
 	// Check usbfs capabilities
-	if caps, err := handle.GetCapabilities(); err == nil {
+	if caps, err := handle.Capabilities(); err == nil {
 		fmt.Printf("   🛠️  usbfs capabilities: 0x%08x\n", caps)
 
 		if caps&0x08 != 0 {
@@ -343,7 +343,7 @@ func analyzeAltModeCapabilities(handle *usb.DeviceHandle) {
 	}
 
 	// Try to get device speed
-	if speed, err := handle.GetSpeed(); err == nil {
+	if speed, err := handle.Speed(); err == nil {
 		speedNames := map[uint8]string{
 			1: "Low Speed (1.5 Mbps)",
 			2: "Full Speed (12 Mbps)",
@@ -372,7 +372,7 @@ func simulateDisplayPortDetection(handle *usb.DeviceHandle) {
 	// 3. SVID discovery and mode negotiation
 
 	// For demo purposes, we'll check device characteristics
-	device := handle.GetDevice()
+	device := handle.Device()
 
 	// Simulate VDM discovery based on device properties
 	if device.Descriptor.USBVersion >= 0x0300 {

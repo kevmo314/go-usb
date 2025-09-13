@@ -17,7 +17,7 @@ func main() {
 	flag.Parse()
 
 	// Get list of USB devices
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Fatalf("Failed to get device list: %v", err)
 	}
@@ -51,12 +51,12 @@ func main() {
 
 		// Get manufacturer and product strings if available
 		if dev.Descriptor.ManufacturerIndex > 0 {
-			if str, err := handle.GetStringDescriptor(dev.Descriptor.ManufacturerIndex); err == nil {
+			if str, err := handle.StringDescriptor(dev.Descriptor.ManufacturerIndex); err == nil {
 				fmt.Printf("  Manufacturer: %s\n", str)
 			}
 		}
 		if dev.Descriptor.ProductIndex > 0 {
-			if str, err := handle.GetStringDescriptor(dev.Descriptor.ProductIndex); err == nil {
+			if str, err := handle.StringDescriptor(dev.Descriptor.ProductIndex); err == nil {
 				fmt.Printf("  Product: %s\n", str)
 			}
 		}
@@ -65,7 +65,7 @@ func main() {
 
 		// Get each configuration descriptor
 		for configIdx := uint8(0); configIdx < dev.Descriptor.NumConfigurations; configIdx++ {
-			config, err := handle.GetConfigDescriptorByValue(configIdx)
+			config, err := handle.ConfigDescriptorByValue(configIdx)
 			if err != nil {
 				fmt.Printf("    Config %d: Error getting descriptor: %v\n", configIdx, err)
 				continue
@@ -153,7 +153,7 @@ func printEndpoint(ep *usb.Endpoint) {
 	fmt.Printf("            Direction: %s\n", direction)
 
 	transferType := ""
-	switch ep.GetTransferType() {
+	switch ep.TransferType() {
 	case 0: // Control
 		transferType = "Control"
 	case 1: // Isochronous

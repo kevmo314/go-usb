@@ -18,7 +18,7 @@ func main() {
 	fmt.Println("==============================")
 
 	// Get device list
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Fatalf("Failed to get device list: %v", err)
 	}
@@ -59,7 +59,7 @@ func testExtendedFeatures(handle *usb.DeviceHandle, deviceIndex int) {
 	fmt.Printf("   🧪 Testing extended USB features...\n")
 
 	// Test 1: Device Status
-	if status, err := handle.GetStatus(0x80, 0); err == nil {
+	if status, err := handle.Status(0x80, 0); err == nil {
 		fmt.Printf("   📊 Device status: 0x%04x\n", status)
 
 		// Check self-powered and remote wakeup bits
@@ -69,7 +69,7 @@ func testExtendedFeatures(handle *usb.DeviceHandle, deviceIndex int) {
 	}
 
 	// Test 2: Device Speed (if supported)
-	if speed, err := handle.GetSpeed(); err == nil {
+	if speed, err := handle.Speed(); err == nil {
 		speedStr := map[uint8]string{
 			1: "Low Speed (1.5 Mbps)",
 			2: "Full Speed (12 Mbps)",
@@ -87,7 +87,7 @@ func testExtendedFeatures(handle *usb.DeviceHandle, deviceIndex int) {
 	}
 
 	// Test 3: Capabilities (Linux 3.15+)
-	if caps, err := handle.GetCapabilities(); err == nil {
+	if caps, err := handle.Capabilities(); err == nil {
 		fmt.Printf("   🛠️  usbfs capabilities: 0x%08x\n", caps)
 
 		// Decode capability bits

@@ -31,13 +31,13 @@ func main() {
 	flag.Parse()
 
 	if *version {
-		fmt.Printf("lsusb (go-usb) %s\n", usb.GetVersion())
+		fmt.Printf("lsusb (go-usb) %s\n", usb.Version())
 		fmt.Println("Copyright (C) 2024 go-usb project")
 		return
 	}
 
 	// Get device list
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Fatalf("Failed to get device list: %v", err)
 	}
@@ -123,12 +123,12 @@ func displaySimple(devices []*usb.Device) {
 	for _, dev := range devices {
 		desc := dev.Descriptor
 
-		vendorName := usb.GetVendorName(desc.VendorID)
-		productName := usb.GetProductName(desc.VendorID, desc.ProductID)
+		vendorName := usb.VendorName(desc.VendorID)
+		productName := usb.ProductName(desc.VendorID, desc.ProductID)
 
 		// Try to get from sysfs first (faster)
 		if productName == "" {
-			if sysfsProduct := dev.GetProductFromSysfs(); sysfsProduct != "" {
+			if sysfsProduct := dev.ProductFromSysfs(); sysfsProduct != "" {
 				productName = sysfsProduct
 			}
 		}
@@ -152,7 +152,7 @@ func displayVerbose(devices []*usb.Device) {
 		fmt.Printf("  bLength             %5d\n", desc.Length)
 		fmt.Printf("  bDescriptorType     %5d\n", desc.DescriptorType)
 		fmt.Printf("  bcdUSB              %2d.%02d\n", desc.USBVersion>>8, desc.USBVersion&0xff)
-		className := usb.GetClassName(desc.DeviceClass)
+		className := usb.ClassName(desc.DeviceClass)
 		if className != "" {
 			fmt.Printf("  bDeviceClass        %5d %s\n", desc.DeviceClass, className)
 		} else {
@@ -167,8 +167,8 @@ func displayVerbose(devices []*usb.Device) {
 			fmt.Printf("  bDeviceProtocol     %5d\n", desc.DeviceProtocol)
 		}
 		fmt.Printf("  bMaxPacketSize0     %5d\n", desc.MaxPacketSize0)
-		fmt.Printf("  idVendor           0x%04x %s\n", desc.VendorID, usb.GetVendorName(desc.VendorID))
-		fmt.Printf("  idProduct          0x%04x %s\n", desc.ProductID, usb.GetProductName(desc.VendorID, desc.ProductID))
+		fmt.Printf("  idVendor           0x%04x %s\n", desc.VendorID, usb.VendorName(desc.VendorID))
+		fmt.Printf("  idProduct          0x%04x %s\n", desc.ProductID, usb.ProductName(desc.VendorID, desc.ProductID))
 		fmt.Printf("  bcdDevice           %2d.%02d\n", desc.DeviceVersion>>8, desc.DeviceVersion&0xff)
 		fmt.Printf("  iManufacturer       %5d\n", desc.ManufacturerIndex)
 		fmt.Printf("  iProduct            %5d\n", desc.ProductIndex)
@@ -182,19 +182,19 @@ func displayVerbose(devices []*usb.Device) {
 
 			// Get string descriptors
 			if desc.ManufacturerIndex > 0 {
-				if str, err := handle.GetStringDescriptor(desc.ManufacturerIndex); err == nil && str != "" {
+				if str, err := handle.StringDescriptor(desc.ManufacturerIndex); err == nil && str != "" {
 					fmt.Printf("  Manufacturer: %s\n", str)
 				}
 			}
 
 			if desc.ProductIndex > 0 {
-				if str, err := handle.GetStringDescriptor(desc.ProductIndex); err == nil && str != "" {
+				if str, err := handle.StringDescriptor(desc.ProductIndex); err == nil && str != "" {
 					fmt.Printf("  Product: %s\n", str)
 				}
 			}
 
 			if desc.SerialNumberIndex > 0 {
-				if str, err := handle.GetStringDescriptor(desc.SerialNumberIndex); err == nil && str != "" {
+				if str, err := handle.StringDescriptor(desc.SerialNumberIndex); err == nil && str != "" {
 					fmt.Printf("  Serial Number: %s\n", str)
 				}
 			}
@@ -235,7 +235,7 @@ func displayVerbose(devices []*usb.Device) {
 					fmt.Printf("      bInterfaceNumber    %5d\n", iface.InterfaceNumber)
 					fmt.Printf("      bAlternateSetting   %5d\n", iface.AlternateSetting)
 					fmt.Printf("      bNumEndpoints       %5d\n", iface.NumEndpoints)
-					fmt.Printf("      bInterfaceClass     %5d %s\n", iface.InterfaceClass, usb.GetClassName(iface.InterfaceClass))
+					fmt.Printf("      bInterfaceClass     %5d %s\n", iface.InterfaceClass, usb.ClassName(iface.InterfaceClass))
 					fmt.Printf("      bInterfaceSubClass  %5d\n", iface.InterfaceSubClass)
 					fmt.Printf("      bInterfaceProtocol  %5d\n", iface.InterfaceProtocol)
 					fmt.Printf("      iInterface          %5d\n", iface.InterfaceIndex)

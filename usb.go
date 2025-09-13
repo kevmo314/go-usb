@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// GetVersion returns the version of the go-usb library
-func GetVersion() string {
+// Version returns the version of the go-usb library
+func Version() string {
 	return "1.0.0"
 }
 
@@ -39,8 +39,8 @@ const (
 	EndpointDirectionIn  EndpointDirection = 0x80
 )
 
-// GetDeviceList returns a list of USB devices
-func GetDeviceList() ([]*Device, error) {
+// DeviceList returns a list of USB devices
+func DeviceList() ([]*Device, error) {
 	// Use sysfs enumerator for fast device discovery
 	enumerator := NewSysfsEnumerator()
 	sysfsDevices, err := enumerator.EnumerateDevices()
@@ -59,7 +59,7 @@ func GetDeviceList() ([]*Device, error) {
 
 // OpenDevice opens a device by vendor and product ID
 func OpenDevice(vendorID, productID uint16) (*DeviceHandle, error) {
-	devices, err := GetDeviceList()
+	devices, err := DeviceList()
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func OpenDevice(vendorID, productID uint16) (*DeviceHandle, error) {
 
 // OpenDeviceWithPath opens a device by its path
 func OpenDeviceWithPath(path string) (*DeviceHandle, error) {
-	devices, err := GetDeviceList()
+	devices, err := DeviceList()
 	if err != nil {
 		return nil, err
 	}

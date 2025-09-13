@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-func TestGetDeviceList(t *testing.T) {
-	devices, err := GetDeviceList()
+func TestDeviceList(t *testing.T) {
+	devices, err := DeviceList()
 	if err != nil {
 		t.Fatalf("Failed to get device list: %v", err)
 	}
@@ -25,8 +25,8 @@ func TestSetDebug(t *testing.T) {
 	t.Skip("SetDebug has been removed from the API")
 }
 
-func TestGetVersion(t *testing.T) {
-	version := GetVersion()
+func TestVersion(t *testing.T) {
+	version := Version()
 	if version == "" {
 		t.Error("Version string is empty")
 	}
@@ -67,12 +67,12 @@ func TestIsValidDevicePath(t *testing.T) {
 	}
 }
 
-func TestGetDeviceListDetailed(t *testing.T) {
+func TestDeviceListDetailed(t *testing.T) {
 	if os.Getuid() != 0 {
 		t.Skip("Skipping test that requires root privileges")
 	}
 
-	devices, err := GetDeviceList()
+	devices, err := DeviceList()
 	if err != nil {
 		t.Fatalf("Failed to get device list: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestOpenDevice(t *testing.T) {
 		t.Skip("Skipping test that requires root privileges")
 	}
 
-	devices, err := GetDeviceList()
+	devices, err := DeviceList()
 	if err != nil || len(devices) == 0 {
 		t.Skip("No USB devices available for testing")
 	}
@@ -122,7 +122,7 @@ func TestOpenDevice(t *testing.T) {
 	} else {
 		defer handle.Close()
 
-		desc := handle.GetDescriptor()
+		desc := handle.Descriptor()
 		if desc.VendorID != firstDevice.Descriptor.VendorID {
 			t.Errorf("VendorID mismatch: got 0x%04x, expected 0x%04x",
 				desc.VendorID, firstDevice.Descriptor.VendorID)
@@ -163,7 +163,7 @@ func TestControlTransfer(t *testing.T) {
 		t.Skip("Skipping test that requires root privileges")
 	}
 
-	devices, err := GetDeviceList()
+	devices, err := DeviceList()
 	if err != nil || len(devices) == 0 {
 		t.Skip("No USB devices available for testing")
 	}
@@ -206,7 +206,7 @@ func TestStringDescriptor(t *testing.T) {
 		t.Skip("Skipping test that requires root privileges")
 	}
 
-	devices, err := GetDeviceList()
+	devices, err := DeviceList()
 	if err != nil || len(devices) == 0 {
 		t.Skip("No USB devices available for testing")
 	}
@@ -233,7 +233,7 @@ func TestStringDescriptor(t *testing.T) {
 	defer handle.Close()
 
 	if testDevice.Descriptor.ManufacturerIndex > 0 {
-		manufacturer, err := handle.GetStringDescriptor(testDevice.Descriptor.ManufacturerIndex)
+		manufacturer, err := handle.StringDescriptor(testDevice.Descriptor.ManufacturerIndex)
 		if err != nil {
 			t.Errorf("Failed to get manufacturer string: %v", err)
 		} else {
@@ -242,7 +242,7 @@ func TestStringDescriptor(t *testing.T) {
 	}
 
 	if testDevice.Descriptor.ProductIndex > 0 {
-		product, err := handle.GetStringDescriptor(testDevice.Descriptor.ProductIndex)
+		product, err := handle.StringDescriptor(testDevice.Descriptor.ProductIndex)
 		if err != nil {
 			t.Errorf("Failed to get product string: %v", err)
 		} else {
@@ -251,23 +251,23 @@ func TestStringDescriptor(t *testing.T) {
 	}
 }
 
-func BenchmarkGetDeviceList(b *testing.B) {
-	_, err := GetDeviceList()
+func BenchmarkDeviceList(b *testing.B) {
+	_, err := DeviceList()
 	if err != nil {
 		b.Fatalf("Failed to get device list: %v", err)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := GetDeviceList()
+		_, err := DeviceList()
 		if err != nil {
 			b.Fatalf("Failed to get device list: %v", err)
 		}
 	}
 }
 
-func ExampleGetDeviceList() {
-	devices, err := GetDeviceList()
+func ExampleDeviceList() {
+	devices, err := DeviceList()
 	if err != nil {
 		panic(err)
 	}

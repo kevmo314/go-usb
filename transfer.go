@@ -314,19 +314,19 @@ func (t *Transfer) SetUserData(userdata interface{}) {
 	t.userdata = userdata
 }
 
-func (t *Transfer) GetStatus() TransferStatus {
+func (t *Transfer) Status() TransferStatus {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.status
 }
 
-func (t *Transfer) GetActualLength() int {
+func (t *Transfer) ActualLength() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.actualLength
 }
 
-func (t *Transfer) GetBuffer() []byte {
+func (t *Transfer) Buffer() []byte {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.actualLength > 0 && t.actualLength <= len(t.buffer) {

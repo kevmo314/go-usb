@@ -10,7 +10,7 @@ import (
 
 func main() {
 	// Get device list
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Fatalf("Failed to get device list: %v", err)
 	}
@@ -77,11 +77,11 @@ func main() {
 	}
 
 	// Test 2: Read string descriptors if available
-	desc := handle.GetDescriptor()
+	desc := handle.Descriptor()
 
 	if desc.ManufacturerIndex > 0 {
 		fmt.Printf("\nTest 2: Reading manufacturer string descriptor (index %d)...\n", desc.ManufacturerIndex)
-		manufacturer, err := handle.GetStringDescriptor(desc.ManufacturerIndex)
+		manufacturer, err := handle.StringDescriptor(desc.ManufacturerIndex)
 		if err != nil {
 			fmt.Printf("Failed to read manufacturer: %v\n", err)
 		} else {
@@ -91,7 +91,7 @@ func main() {
 
 	if desc.ProductIndex > 0 {
 		fmt.Printf("\nTest 3: Reading product string descriptor (index %d)...\n", desc.ProductIndex)
-		product, err := handle.GetStringDescriptor(desc.ProductIndex)
+		product, err := handle.StringDescriptor(desc.ProductIndex)
 		if err != nil {
 			fmt.Printf("Failed to read product: %v\n", err)
 		} else {
@@ -101,7 +101,7 @@ func main() {
 
 	if desc.SerialNumberIndex > 0 {
 		fmt.Printf("\nTest 4: Reading serial number string descriptor (index %d)...\n", desc.SerialNumberIndex)
-		serial, err := handle.GetStringDescriptor(desc.SerialNumberIndex)
+		serial, err := handle.StringDescriptor(desc.SerialNumberIndex)
 		if err != nil {
 			fmt.Printf("Failed to read serial: %v\n", err)
 		} else {

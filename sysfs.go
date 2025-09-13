@@ -180,18 +180,3 @@ func (s *SysfsDevice) ToUSBDevice() *Device {
 
 	return device
 }
-
-// GetManufacturer returns the manufacturer string from sysfs
-func (s *SysfsDevice) GetManufacturer() string {
-	return s.Manufacturer
-}
-
-// GetProduct returns the product string from sysfs
-func (s *SysfsDevice) GetProduct() string {
-	return s.Product
-}
-
-// GetSerial returns the serial string from sysfs
-func (s *SysfsDevice) GetSerial() string {
-	return s.Serial
-}

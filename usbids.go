@@ -187,7 +187,7 @@ func (db *USBIDDatabase) LoadFromFile(path string) error {
 	return scanner.Err()
 }
 
-func (db *USBIDDatabase) GetVendorName(vid uint16) string {
+func (db *USBIDDatabase) VendorName(vid uint16) string {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
@@ -197,7 +197,7 @@ func (db *USBIDDatabase) GetVendorName(vid uint16) string {
 	return ""
 }
 
-func (db *USBIDDatabase) GetProductName(vid, pid uint16) string {
+func (db *USBIDDatabase) ProductName(vid, pid uint16) string {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
@@ -209,7 +209,7 @@ func (db *USBIDDatabase) GetProductName(vid, pid uint16) string {
 	return ""
 }
 
-func (db *USBIDDatabase) GetClassName(class uint8) string {
+func (db *USBIDDatabase) ClassName(class uint8) string {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
@@ -229,7 +229,7 @@ func isHex(s string) bool {
 }
 
 // Global functions for convenience
-func GetVendorName(vid uint16) string {
+func VendorName(vid uint16) string {
 	// Try to load USB IDs database if not loaded
 	if !globalUSBIDs.loaded {
 		paths := []string{
@@ -244,10 +244,10 @@ func GetVendorName(vid uint16) string {
 		}
 	}
 
-	return globalUSBIDs.GetVendorName(vid)
+	return globalUSBIDs.VendorName(vid)
 }
 
-func GetProductName(vid, pid uint16) string {
+func ProductName(vid, pid uint16) string {
 	if !globalUSBIDs.loaded {
 		paths := []string{
 			"/usr/share/hwdata/usb.ids",
@@ -261,29 +261,29 @@ func GetProductName(vid, pid uint16) string {
 		}
 	}
 
-	return globalUSBIDs.GetProductName(vid, pid)
+	return globalUSBIDs.ProductName(vid, pid)
 }
 
-func GetClassName(class uint8) string {
-	return globalUSBIDs.GetClassName(class)
+func ClassName(class uint8) string {
+	return globalUSBIDs.ClassName(class)
 }
 
 // Add method to Device to get string descriptors from sysfs
-func (d *Device) GetManufacturerFromSysfs() string {
+func (d *Device) ManufacturerFromSysfs() string {
 	if d.sysfsStrings != nil {
 		return d.sysfsStrings.Manufacturer
 	}
 	return ""
 }
 
-func (d *Device) GetProductFromSysfs() string {
+func (d *Device) ProductFromSysfs() string {
 	if d.sysfsStrings != nil {
 		return d.sysfsStrings.Product
 	}
 	return ""
 }
 
-func (d *Device) GetSerialFromSysfs() string {
+func (d *Device) SerialFromSysfs() string {
 	if d.sysfsStrings != nil {
 		return d.sysfsStrings.Serial
 	}

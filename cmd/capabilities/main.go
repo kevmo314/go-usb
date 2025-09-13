@@ -16,7 +16,7 @@ func main() {
 	flag.Parse()
 
 	// Get list of USB devices
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Fatalf("Failed to get device list: %v", err)
 	}
@@ -46,7 +46,7 @@ func main() {
 		defer handle.Close()
 
 		// Try to get device speed
-		speed, err := handle.GetSpeed()
+		speed, err := handle.Speed()
 		if err == nil {
 			speedStr := getSpeedString(speed)
 			if speedStr == "Unknown" {
@@ -59,12 +59,12 @@ func main() {
 
 		// Get manufacturer and product strings
 		if dev.Descriptor.ManufacturerIndex > 0 {
-			if str, err := handle.GetStringDescriptor(dev.Descriptor.ManufacturerIndex); err == nil {
+			if str, err := handle.StringDescriptor(dev.Descriptor.ManufacturerIndex); err == nil {
 				fmt.Printf("  Manufacturer: %s\n", str)
 			}
 		}
 		if dev.Descriptor.ProductIndex > 0 {
-			if str, err := handle.GetStringDescriptor(dev.Descriptor.ProductIndex); err == nil {
+			if str, err := handle.StringDescriptor(dev.Descriptor.ProductIndex); err == nil {
 				fmt.Printf("  Product: %s\n", str)
 			}
 		}
@@ -74,7 +74,7 @@ func main() {
 		fmt.Printf("  USB Version: %x.%02x\n", (usbVersion>>8)&0xff, usbVersion&0xff)
 
 		// Display device speed
-		if speed, err := handle.GetSpeed(); err == nil {
+		if speed, err := handle.Speed(); err == nil {
 			fmt.Printf("  Speed: %s\n", getSpeedString(speed))
 		}
 
@@ -87,7 +87,7 @@ func main() {
 			fmt.Printf("    Device Capabilities: %d\n", bos.NumDeviceCaps)
 
 			// Try to get USB 2.0 Extension descriptor
-			usb2ext, err := handle.GetUSB20ExtensionDescriptor()
+			usb2ext, err := handle.USB20ExtensionDescriptor()
 			if err == nil && usb2ext != nil {
 				fmt.Printf("    USB 2.0 Extension:\n")
 				fmt.Printf("      Attributes: 0x%08x\n", usb2ext.Attributes)
@@ -106,7 +106,7 @@ func main() {
 			}
 
 			// Try to get SuperSpeed USB capability descriptor
-			ssusb, err := handle.GetSSUSBDeviceCapabilityDescriptor()
+			ssusb, err := handle.SSUSBDeviceCapabilityDescriptor()
 			if err == nil && ssusb != nil {
 				fmt.Printf("    SuperSpeed USB Capability:\n")
 				fmt.Printf("      Attributes: 0x%02x\n", ssusb.Attributes)
@@ -137,7 +137,7 @@ func main() {
 		// Check for SuperSpeed endpoints in configurations
 		fmt.Printf("  Configurations with SuperSpeed endpoints:\n")
 		for configIdx := uint8(0); configIdx < dev.Descriptor.NumConfigurations; configIdx++ {
-			config, err := handle.GetConfigDescriptorByValue(configIdx)
+			config, err := handle.ConfigDescriptorByValue(configIdx)
 			if err != nil {
 				continue
 			}
@@ -152,7 +152,7 @@ func main() {
 								hasSS = true
 							}
 							epType := "Unknown"
-							switch ep.GetTransferType() {
+							switch ep.TransferType() {
 							case 0:
 								epType = "Control"
 							case 1:
@@ -168,7 +168,7 @@ func main() {
 							fmt.Printf("        Attributes: 0x%02x\n", ep.SSCompanion.Attributes)
 
 							// Decode attributes for bulk endpoints
-							if ep.GetTransferType() == 2 { // Bulk
+							if ep.TransferType() == 2 { // Bulk
 								maxStreams := (ep.SSCompanion.Attributes & 0x1f) + 1
 								if maxStreams > 1 {
 									fmt.Printf("          Max Streams: %d\n", maxStreams)
@@ -176,21 +176,21 @@ func main() {
 							}
 
 							// Decode attributes for isochronous endpoints
-							if ep.GetTransferType() == 1 { // Isochronous
+							if ep.TransferType() == 1 { // Isochronous
 								mult := (ep.SSCompanion.Attributes & 0x03) + 1
 								fmt.Printf("          Mult: %d\n", mult)
 							}
 
 							// BytesPerInterval is only used for periodic endpoints (interrupt/isochronous)
 							// For bulk endpoints, it's always 0
-							if ep.GetTransferType() == 2 { // Bulk
+							if ep.TransferType() == 2 { // Bulk
 								fmt.Printf("        BytesPerInterval: %d (always 0 for bulk)\n", ep.SSCompanion.BytesPerInterval)
 							} else {
 								fmt.Printf("        BytesPerInterval: %d\n", ep.SSCompanion.BytesPerInterval)
 							}
 
 							// You can also get this directly using the helper method:
-							ssComp, err := handle.GetSSEndpointCompanionDescriptor(
+							ssComp, err := handle.SSEndpointCompanionDescriptor(
 								configIdx, alt.InterfaceNumber, alt.AlternateSetting, ep.EndpointAddr)
 							if err == nil && ssComp != nil {
 								fmt.Printf("        (Verified via GetSSEndpointCompanionDescriptor)\n")

@@ -15,7 +15,7 @@ func main() {
 	}
 
 	// Get device list
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Fatalf("Failed to get device list: %v", err)
 	}
@@ -41,19 +41,19 @@ func main() {
 			defer handle.Close()
 
 			if desc.ManufacturerIndex > 0 {
-				if manufacturer, err := handle.GetStringDescriptor(desc.ManufacturerIndex); err == nil {
+				if manufacturer, err := handle.StringDescriptor(desc.ManufacturerIndex); err == nil {
 					fmt.Printf("  Manufacturer: %s\n", manufacturer)
 				}
 			}
 
 			if desc.ProductIndex > 0 {
-				if product, err := handle.GetStringDescriptor(desc.ProductIndex); err == nil {
+				if product, err := handle.StringDescriptor(desc.ProductIndex); err == nil {
 					fmt.Printf("  Product:     %s\n", product)
 				}
 			}
 
 			if desc.SerialNumberIndex > 0 {
-				if serial, err := handle.GetStringDescriptor(desc.SerialNumberIndex); err == nil {
+				if serial, err := handle.StringDescriptor(desc.SerialNumberIndex); err == nil {
 					fmt.Printf("  Serial:      %s\n", serial)
 				}
 			}

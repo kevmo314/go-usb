@@ -17,7 +17,7 @@ func main() {
 	fmt.Println("🔧 USB Driver Management Test")
 	fmt.Println("==============================")
 
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func testInterfaceOperations(handle *usb.DeviceHandle, iface uint8) {
 	fmt.Printf("   🧪 Testing interface operations...\n")
 
 	// Get interface alternate setting
-	altSetting, err := handle.GetInterface(iface)
+	altSetting, err := handle.Interface(iface)
 	if err != nil {
 		fmt.Printf("      ⚠️  Could not get alternate setting: %v\n", err)
 	} else {
@@ -209,7 +209,7 @@ func testInterfaceOperations(handle *usb.DeviceHandle, iface uint8) {
 	}
 
 	// Test setting the same configuration (should be safe)
-	currentConfig, err := handle.GetConfiguration()
+	currentConfig, err := handle.Configuration()
 	if err == nil && currentConfig > 0 {
 		err = handle.SetConfiguration(currentConfig)
 		if err != nil {

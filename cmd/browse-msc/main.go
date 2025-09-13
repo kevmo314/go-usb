@@ -103,7 +103,7 @@ func main() {
 	fmt.Printf("✓ Found and opened USB device %04x:%04x\n", vid, pid)
 
 	// Get device descriptor for information
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Fatal("Failed to get device list:", err)
 	}
@@ -118,7 +118,7 @@ func main() {
 
 	if device != nil {
 		// Try to get product name
-		if product, err := handle.GetStringDescriptor(device.Descriptor.ProductIndex); err == nil {
+		if product, err := handle.StringDescriptor(device.Descriptor.ProductIndex); err == nil {
 			fmt.Printf("Device: %s\n", product)
 		}
 	}
@@ -568,7 +568,7 @@ func listMassStorageDevices() {
 	fmt.Println("\nSearching for USB Mass Storage devices...")
 	fmt.Println()
 
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Fatal("Failed to get device list:", err)
 	}
@@ -587,10 +587,10 @@ func listMassStorageDevices() {
 
 			// Try to get product name
 			if handle, err := device.Open(); err == nil {
-				if product, err := handle.GetStringDescriptor(device.Descriptor.ProductIndex); err == nil {
+				if product, err := handle.StringDescriptor(device.Descriptor.ProductIndex); err == nil {
 					fmt.Printf("  Product: %s\n", product)
 				}
-				if manufacturer, err := handle.GetStringDescriptor(device.Descriptor.ManufacturerIndex); err == nil {
+				if manufacturer, err := handle.StringDescriptor(device.Descriptor.ManufacturerIndex); err == nil {
 					fmt.Printf("  Manufacturer: %s\n", manufacturer)
 				}
 				handle.Close()

@@ -273,7 +273,7 @@ func main() {
 		}
 
 		// Find device in list
-		devices, _ := usb.GetDeviceList()
+		devices, _ := usb.DeviceList()
 		for _, d := range devices {
 			if d.Descriptor.VendorID == vid && d.Descriptor.ProductID == pid {
 				device = d
@@ -311,7 +311,7 @@ func main() {
 			}
 		} else {
 			// Find device in list
-			devices, _ := usb.GetDeviceList()
+			devices, _ := usb.DeviceList()
 			for _, d := range devices {
 				if d.Descriptor.VendorID == 0x046d && d.Descriptor.ProductID == 0x08e5 {
 					device = d
@@ -334,11 +334,11 @@ func main() {
 	fmt.Printf("  Vendor ID:  0x%04x\n", device.Descriptor.VendorID)
 	fmt.Printf("  Product ID: 0x%04x\n", device.Descriptor.ProductID)
 
-	if product, err := handle.GetStringDescriptor(device.Descriptor.ProductIndex); err == nil {
+	if product, err := handle.StringDescriptor(device.Descriptor.ProductIndex); err == nil {
 		fmt.Printf("  Product:    %s\n", product)
 	}
 
-	if serial, err := handle.GetStringDescriptor(device.Descriptor.SerialNumberIndex); err == nil {
+	if serial, err := handle.StringDescriptor(device.Descriptor.SerialNumberIndex); err == nil {
 		fmt.Printf("  Serial:     %s\n", serial)
 	}
 
@@ -388,7 +388,7 @@ func main() {
 
 // findAnyWebcamWithDevice searches for any UVC device and returns handle and device
 func findAnyWebcamWithDevice() (*usb.DeviceHandle, *usb.Device, error) {
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -734,7 +734,7 @@ func listUVCDevices() {
 	fmt.Println("\nSearching for UVC video devices...")
 	fmt.Println()
 
-	devices, err := usb.GetDeviceList()
+	devices, err := usb.DeviceList()
 	if err != nil {
 		log.Fatal("Failed to get device list:", err)
 	}
@@ -748,13 +748,13 @@ func listUVCDevices() {
 
 			// Try to get product name
 			if handle, err := device.Open(); err == nil {
-				if product, err := handle.GetStringDescriptor(device.Descriptor.ProductIndex); err == nil {
+				if product, err := handle.StringDescriptor(device.Descriptor.ProductIndex); err == nil {
 					fmt.Printf("  Product: %s\n", product)
 				}
-				if manufacturer, err := handle.GetStringDescriptor(device.Descriptor.ManufacturerIndex); err == nil {
+				if manufacturer, err := handle.StringDescriptor(device.Descriptor.ManufacturerIndex); err == nil {
 					fmt.Printf("  Manufacturer: %s\n", manufacturer)
 				}
-				if serial, err := handle.GetStringDescriptor(device.Descriptor.SerialNumberIndex); err == nil {
+				if serial, err := handle.StringDescriptor(device.Descriptor.SerialNumberIndex); err == nil {
 					fmt.Printf("  Serial: %s\n", serial)
 				}
 				handle.Close()

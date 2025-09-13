@@ -362,11 +362,11 @@ func (h *DeviceHandle) reapLoop() {
 	}
 }
 
-func (h *DeviceHandle) GetDescriptor() DeviceDescriptor {
+func (h *DeviceHandle) Descriptor() DeviceDescriptor {
 	return h.device.Descriptor
 }
 
-func (h *DeviceHandle) GetConfiguration() (int, error) {
+func (h *DeviceHandle) Configuration() (int, error) {
 	buf := make([]byte, 1)
 
 	ctrl := usbCtrlRequest{
@@ -403,10 +403,10 @@ func (h *DeviceHandle) SetConfiguration(config int) error {
 	return nil
 }
 
-// GetConfigDescriptorByValue gets the parsed configuration descriptor by index
+// ConfigDescriptorByValue gets the parsed configuration descriptor by index
 // This is equivalent to libusb_get_config_descriptor
-func (h *DeviceHandle) GetConfigDescriptorByValue(index uint8) (*ConfigDescriptor, error) {
-	data, err := h.GetRawConfigDescriptor(index)
+func (h *DeviceHandle) ConfigDescriptorByValue(index uint8) (*ConfigDescriptor, error) {
+	data, err := h.RawConfigDescriptor(index)
 	if err != nil {
 		return nil, err
 	}
@@ -419,8 +419,8 @@ func (h *DeviceHandle) GetConfigDescriptorByValue(index uint8) (*ConfigDescripto
 	return config, nil
 }
 
-// GetRawConfigDescriptor gets the raw configuration descriptor data by index
-func (h *DeviceHandle) GetRawConfigDescriptor(index uint8) ([]byte, error) {
+// RawConfigDescriptor gets the raw configuration descriptor data by index
+func (h *DeviceHandle) RawConfigDescriptor(index uint8) ([]byte, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -625,8 +625,8 @@ func (h *DeviceHandle) AttachKernelDriver(iface uint8) error {
 	return nil
 }
 
-// GetStatus gets device, interface, or endpoint status
-func (h *DeviceHandle) GetStatus(requestType uint8, index uint16) (uint16, error) {
+// Status gets device, interface, or endpoint status
+func (h *DeviceHandle) Status(requestType uint8, index uint16) (uint16, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -705,8 +705,8 @@ func (h *DeviceHandle) SetFeature(requestType uint8, feature uint16, index uint1
 	return nil
 }
 
-// GetInterface gets the alternate setting of an interface
-func (h *DeviceHandle) GetInterface(iface uint8) (uint8, error) {
+// Interface gets the alternate setting of an interface
+func (h *DeviceHandle) Interface(iface uint8) (uint8, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -733,8 +733,8 @@ func (h *DeviceHandle) GetInterface(iface uint8) (uint8, error) {
 	return buf[0], nil
 }
 
-// GetRawDescriptor gets any descriptor by type and index
-func (h *DeviceHandle) GetRawDescriptor(descType uint8, descIndex uint8, langID uint16, data []byte) (int, error) {
+// RawDescriptor gets any descriptor by type and index
+func (h *DeviceHandle) RawDescriptor(descType uint8, descIndex uint8, langID uint16, data []byte) (int, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -823,8 +823,8 @@ func (h *DeviceHandle) SynchFrame(endpoint uint8) (uint16, error) {
 	return binary.LittleEndian.Uint16(buf), nil
 }
 
-// GetCapabilities gets usbfs capabilities (Linux 3.15+)
-func (h *DeviceHandle) GetCapabilities() (uint32, error) {
+// Capabilities gets usbfs capabilities (Linux 3.15+)
+func (h *DeviceHandle) Capabilities() (uint32, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -841,8 +841,8 @@ func (h *DeviceHandle) GetCapabilities() (uint32, error) {
 	return caps, nil
 }
 
-// GetSpeed gets the device speed
-func (h *DeviceHandle) GetSpeed() (uint8, error) {
+// Speed gets the device speed
+func (h *DeviceHandle) Speed() (uint8, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -913,15 +913,15 @@ func (h *DeviceHandle) FreeStreams(endpoints []uint8) error {
 	return nil
 }
 
-// GetSSEndpointCompanionDescriptor gets the SuperSpeed endpoint companion descriptor for a given endpoint
+// SSEndpointCompanionDescriptor gets the SuperSpeed endpoint companion descriptor for a given endpoint
 // This is equivalent to libusb_get_ss_endpoint_companion_descriptor
-func (h *DeviceHandle) GetSSEndpointCompanionDescriptor(configIndex uint8, interfaceNumber uint8, altSetting uint8, endpointAddress uint8) (*SuperSpeedEndpointCompanionDescriptor, error) {
-	config, err := h.GetConfigDescriptorByValue(configIndex)
+func (h *DeviceHandle) SSEndpointCompanionDescriptor(configIndex uint8, interfaceNumber uint8, altSetting uint8, endpointAddress uint8) (*SuperSpeedEndpointCompanionDescriptor, error) {
+	config, err := h.ConfigDescriptorByValue(configIndex)
 	if err != nil {
 		return nil, err
 	}
 
-	altSettingDesc := config.GetInterfaceAltSetting(interfaceNumber, altSetting)
+	altSettingDesc := config.InterfaceAltSetting(interfaceNumber, altSetting)
 	if altSettingDesc == nil {
 		return nil, fmt.Errorf("interface %d alt setting %d not found", interfaceNumber, altSetting)
 	}
@@ -965,12 +965,12 @@ func (h *DeviceHandle) GetSSEndpointCompanionDescriptor(configIndex uint8, inter
 	return nil, fmt.Errorf("endpoint %02x not found", endpointAddress)
 }
 
-// GetSSUSBDeviceCapabilityDescriptor gets the SuperSpeed USB device capability descriptor
+// SSUSBDeviceCapabilityDescriptor gets the SuperSpeed USB device capability descriptor
 // This is equivalent to libusb_get_ss_usb_device_capability_descriptor
-func (h *DeviceHandle) GetSSUSBDeviceCapabilityDescriptor() (*SuperSpeedUSBCapability, error) {
+func (h *DeviceHandle) SSUSBDeviceCapabilityDescriptor() (*SuperSpeedUSBCapability, error) {
 	// Read the full BOS descriptor once
 	buf := make([]byte, 1024) // Start with reasonable size
-	n, err := h.GetRawDescriptor(USB_DT_BOS, 0, 0, buf)
+	n, err := h.RawDescriptor(USB_DT_BOS, 0, 0, buf)
 	if err != nil || n < 5 {
 		return nil, fmt.Errorf("failed to read BOS descriptor: %w", err)
 	}
@@ -987,7 +987,7 @@ func (h *DeviceHandle) GetSSUSBDeviceCapabilityDescriptor() (*SuperSpeedUSBCapab
 	if int(totalLength) > n {
 		// Need to read more data
 		buf = make([]byte, totalLength)
-		n, err = h.GetRawDescriptor(USB_DT_BOS, 0, 0, buf)
+		n, err = h.RawDescriptor(USB_DT_BOS, 0, 0, buf)
 		if err != nil || n < int(totalLength) {
 			return nil, fmt.Errorf("failed to read full BOS descriptor: %w", err)
 		}
@@ -1035,12 +1035,12 @@ func (h *DeviceHandle) GetSSUSBDeviceCapabilityDescriptor() (*SuperSpeedUSBCapab
 	return nil, fmt.Errorf("SuperSpeed USB capability not found")
 }
 
-// GetUSB20ExtensionDescriptor gets the USB 2.0 extension descriptor
+// USB20ExtensionDescriptor gets the USB 2.0 extension descriptor
 // This is equivalent to libusb_get_usb_2_0_extension_descriptor
-func (h *DeviceHandle) GetUSB20ExtensionDescriptor() (*USB2ExtensionCapability, error) {
+func (h *DeviceHandle) USB20ExtensionDescriptor() (*USB2ExtensionCapability, error) {
 	// Read the full BOS descriptor once
 	buf := make([]byte, 1024) // Start with reasonable size
-	n, err := h.GetRawDescriptor(USB_DT_BOS, 0, 0, buf)
+	n, err := h.RawDescriptor(USB_DT_BOS, 0, 0, buf)
 	if err != nil || n < 5 {
 		return nil, fmt.Errorf("failed to read BOS descriptor: %w", err)
 	}
@@ -1057,7 +1057,7 @@ func (h *DeviceHandle) GetUSB20ExtensionDescriptor() (*USB2ExtensionCapability, 
 	if int(totalLength) > n {
 		// Need to read more data
 		buf = make([]byte, totalLength)
-		n, err = h.GetRawDescriptor(USB_DT_BOS, 0, 0, buf)
+		n, err = h.RawDescriptor(USB_DT_BOS, 0, 0, buf)
 		if err != nil || n < int(totalLength) {
 			return nil, fmt.Errorf("failed to read full BOS descriptor: %w", err)
 		}
@@ -1106,7 +1106,7 @@ func (h *DeviceHandle) ReadBOSDescriptor() (*BOSDescriptor, []DeviceCapabilityDe
 	// First, get the BOS descriptor header
 	buf := make([]byte, 5) // BOS descriptor header is 5 bytes
 
-	n, err := h.GetRawDescriptor(USB_DT_BOS, 0, 0, buf)
+	n, err := h.RawDescriptor(USB_DT_BOS, 0, 0, buf)
 	if err != nil || n < 5 {
 		return nil, nil, fmt.Errorf("failed to read BOS descriptor: %w", err)
 	}
@@ -1131,7 +1131,7 @@ func (h *DeviceHandle) ReadBOSDescriptor() (*BOSDescriptor, []DeviceCapabilityDe
 
 	// Now read the full BOS descriptor with all capabilities
 	fullBuf := make([]byte, bos.TotalLength)
-	n, err = h.GetRawDescriptor(USB_DT_BOS, 0, 0, fullBuf)
+	n, err = h.RawDescriptor(USB_DT_BOS, 0, 0, fullBuf)
 	if err != nil || n < int(bos.TotalLength) {
 		return nil, nil, fmt.Errorf("failed to read full BOS descriptor: %w", err)
 	}
@@ -1172,7 +1172,7 @@ func (h *DeviceHandle) ReadBOSDescriptor() (*BOSDescriptor, []DeviceCapabilityDe
 func (h *DeviceHandle) ReadDeviceQualifierDescriptor() (*DeviceQualifierDescriptor, error) {
 	buf := make([]byte, 10)
 
-	n, err := h.GetRawDescriptor(USB_DT_DEVICE_QUALIFIER, 0, 0, buf)
+	n, err := h.RawDescriptor(USB_DT_DEVICE_QUALIFIER, 0, 0, buf)
 	if err != nil || n < 10 {
 		return nil, fmt.Errorf("failed to read device qualifier: %w", err)
 	}
@@ -1197,11 +1197,11 @@ func (h *DeviceHandle) SetTestMode(testMode uint8) error {
 	return h.SetFeature(0x00, USB_DEVICE_TEST_MODE, uint16(testMode)<<8)
 }
 
-func (h *DeviceHandle) GetDevice() *Device {
+func (h *DeviceHandle) Device() *Device {
 	return h.device
 }
 
-func (h *DeviceHandle) GetStringDescriptor(index uint8) (string, error) {
+func (h *DeviceHandle) StringDescriptor(index uint8) (string, error) {
 	if index == 0 {
 		return "", nil
 	}

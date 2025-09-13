@@ -238,35 +238,35 @@ func (t *IsochronousTransfer) Wait() error {
 	return t.reapErr
 }
 
-// GetPackets returns the packet descriptors with actual transfer results
-func (t *IsochronousTransfer) GetPackets() []IsoPacketDescriptor {
+// Packets returns the packet descriptors with actual transfer results
+func (t *IsochronousTransfer) Packets() []IsoPacketDescriptor {
 	t.waitForReaping()
 	return t.packets
 }
 
-// GetBuffer returns the transfer buffer
-func (t *IsochronousTransfer) GetBuffer() []byte {
+// Buffer returns the transfer buffer
+func (t *IsochronousTransfer) Buffer() []byte {
 	t.waitForReaping()
 	return t.buffer
 }
 
-// GetActualLength returns the total actual bytes transferred
-func (t *IsochronousTransfer) GetActualLength() int {
+// ActualLength returns the total actual bytes transferred
+func (t *IsochronousTransfer) ActualLength() int {
 	t.waitForReaping()
 	return int(t.urb.ActualLength)
 }
 
-// GetStatus returns the transfer status
-func (t *IsochronousTransfer) GetStatus() int32 {
+// Status returns the transfer status
+func (t *IsochronousTransfer) Status() int32 {
 	t.waitForReaping()
 	return t.urb.Status
 }
 
-// GetIsoPacketBuffer returns the data buffer for a specific isochronous packet.
+// IsoPacketBuffer returns the data buffer for a specific isochronous packet.
 // Similar to libusb's libusb_get_iso_packet_buffer function.
 // The offset is calculated using the Length field (allocated size), but only
 // ActualLength bytes are returned as valid data.
-func (t *IsochronousTransfer) GetIsoPacketBuffer(packetIndex int) ([]byte, error) {
+func (t *IsochronousTransfer) IsoPacketBuffer(packetIndex int) ([]byte, error) {
 	t.waitForReaping()
 	if t.reapErr != nil {
 		return nil, t.reapErr
@@ -298,11 +298,11 @@ func (t *IsochronousTransfer) GetIsoPacketBuffer(packetIndex int) ([]byte, error
 	return t.buffer[offset : offset+int(pkt.ActualLength)], nil
 }
 
-// GetIsoPacketBufferSlices returns slices for all isochronous packets in a single pass.
-// This is more efficient than calling GetIsoPacketBuffer repeatedly as it only
+// IsoPacketBufferSlices returns slices for all isochronous packets in a single pass.
+// This is more efficient than calling IsoPacketBuffer repeatedly as it only
 // calculates offsets once. Returns a slice for each packet, where error packets
 // get nil slices and successful packets get slices into the main buffer.
-func (t *IsochronousTransfer) GetIsoPacketBufferSlices() [][]byte {
+func (t *IsochronousTransfer) IsoPacketBufferSlices() [][]byte {
 	t.waitForReaping()
 
 	slices := make([][]byte, len(t.packets))

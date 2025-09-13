@@ -107,8 +107,8 @@ func (t *AsyncTransfer) SetTimeout(timeout time.Duration) {
 	t.timeout = timeout
 }
 
-// GetStatus returns the transfer status
-func (t *AsyncTransfer) GetStatus() TransferStatus {
+// Status returns the transfer status
+func (t *AsyncTransfer) Status() TransferStatus {
 	t.waitForReaping()
 
 	if t.reapErr != nil {
@@ -120,20 +120,20 @@ func (t *AsyncTransfer) GetStatus() TransferStatus {
 	return TransferCompleted
 }
 
-// GetActualLength returns actual bytes transferred
-func (t *AsyncTransfer) GetActualLength() int {
+// ActualLength returns actual bytes transferred
+func (t *AsyncTransfer) ActualLength() int {
 	t.waitForReaping()
 	return t.actualLength
 }
 
-// GetBuffer returns the transfer buffer
-func (t *AsyncTransfer) GetBuffer() []byte {
+// Buffer returns the transfer buffer
+func (t *AsyncTransfer) Buffer() []byte {
 	t.waitForReaping()
 	return t.buffer[:t.actualLength]
 }
 
-// GetIsoPackets returns isochronous packets
-func (t *AsyncTransfer) GetIsoPackets() []IsoPacket {
+// IsoPackets returns isochronous packets
+func (t *AsyncTransfer) IsoPackets() []IsoPacket {
 	t.waitForReaping()
 	return t.isoPackets
 }
