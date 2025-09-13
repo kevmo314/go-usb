@@ -9,10 +9,10 @@ import (
 )
 
 type USBIDDatabase struct {
-	vendors  map[uint16]Vendor
-	classes  map[uint8]string
-	mu       sync.RWMutex
-	loaded   bool
+	vendors map[uint16]Vendor
+	classes map[uint8]string
+	mu      sync.RWMutex
+	loaded  bool
 }
 
 type Vendor struct {
@@ -39,7 +39,7 @@ func (db *USBIDDatabase) initBasicEntries() {
 			0x0003: "3.0 root hub",
 		},
 	}
-	
+
 	db.vendors[0x174c] = Vendor{
 		Name: "ASMedia Technology Inc.",
 		Products: map[uint16]string{
@@ -47,49 +47,49 @@ func (db *USBIDDatabase) initBasicEntries() {
 			0x3074: "ASM1074 SuperSpeed hub",
 		},
 	}
-	
+
 	db.vendors[0x0db0] = Vendor{
 		Name: "Micro Star International",
 		Products: map[uint16]string{
 			0x422d: "USB Audio",
 		},
 	}
-	
+
 	db.vendors[0x0e8d] = Vendor{
 		Name: "MediaTek Inc.",
 		Products: map[uint16]string{
 			0x0616: "Wireless_Device",
 		},
 	}
-	
+
 	db.vendors[0x1462] = Vendor{
 		Name: "Micro Star International",
 		Products: map[uint16]string{
 			0x7d75: "MYSTIC LIGHT ",
 		},
 	}
-	
+
 	db.vendors[0x05e3] = Vendor{
 		Name: "Genesys Logic, Inc.",
 		Products: map[uint16]string{
 			0x0608: "Hub",
 		},
 	}
-	
+
 	db.vendors[0x046d] = Vendor{
 		Name: "Logitech, Inc.",
 		Products: map[uint16]string{
 			0x08e5: "C920 PRO HD Webcam",
 		},
 	}
-	
+
 	db.vendors[0x2ca3] = Vendor{
 		Name: "DJI Technology Co., Ltd.",
 		Products: map[uint16]string{
 			0x0023: "OsmoAction4",
 		},
 	}
-	
+
 	// Class codes
 	db.classes[0x00] = "Use class information in the Interface Descriptors"
 	db.classes[0x01] = "Audio"
@@ -116,31 +116,31 @@ func (db *USBIDDatabase) initBasicEntries() {
 func (db *USBIDDatabase) LoadFromFile(path string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	
+
 	file, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	
+
 	scanner := bufio.NewScanner(file)
 	var currentVendor uint16
 	var inVendor bool
-	
+
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		
+
 		// Skip empty lines and comments
 		if len(line) == 0 || strings.HasPrefix(line, "#") {
 			continue
 		}
-		
+
 		// Check for class section
 		if strings.HasPrefix(line, "C ") {
 			inVendor = false
 			continue
 		}
-		
+
 		if !inVendor {
 			// Parse vendor line
 			if len(line) >= 4 && isHex(line[:4]) {
@@ -150,7 +150,7 @@ func (db *USBIDDatabase) LoadFromFile(path string) error {
 				}
 				currentVendor = uint16(vid)
 				vendorName := strings.TrimSpace(line[4:])
-				
+
 				vendor := db.vendors[currentVendor]
 				vendor.Name = vendorName
 				if vendor.Products == nil {
@@ -169,7 +169,7 @@ func (db *USBIDDatabase) LoadFromFile(path string) error {
 						continue
 					}
 					productName := strings.TrimSpace(line[4:])
-					
+
 					vendor := db.vendors[currentVendor]
 					if vendor.Products == nil {
 						vendor.Products = make(map[uint16]string)
@@ -182,7 +182,7 @@ func (db *USBIDDatabase) LoadFromFile(path string) error {
 			}
 		}
 	}
-	
+
 	db.loaded = true
 	return scanner.Err()
 }
@@ -190,7 +190,7 @@ func (db *USBIDDatabase) LoadFromFile(path string) error {
 func (db *USBIDDatabase) GetVendorName(vid uint16) string {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
-	
+
 	if vendor, ok := db.vendors[vid]; ok {
 		return vendor.Name
 	}
@@ -200,7 +200,7 @@ func (db *USBIDDatabase) GetVendorName(vid uint16) string {
 func (db *USBIDDatabase) GetProductName(vid, pid uint16) string {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
-	
+
 	if vendor, ok := db.vendors[vid]; ok {
 		if product, ok := vendor.Products[pid]; ok {
 			return product
@@ -212,7 +212,7 @@ func (db *USBIDDatabase) GetProductName(vid, pid uint16) string {
 func (db *USBIDDatabase) GetClassName(class uint8) string {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
-	
+
 	if name, ok := db.classes[class]; ok {
 		return name
 	}
@@ -243,7 +243,7 @@ func GetVendorName(vid uint16) string {
 			}
 		}
 	}
-	
+
 	return globalUSBIDs.GetVendorName(vid)
 }
 
@@ -260,7 +260,7 @@ func GetProductName(vid, pid uint16) string {
 			}
 		}
 	}
-	
+
 	return globalUSBIDs.GetProductName(vid, pid)
 }
 

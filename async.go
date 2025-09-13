@@ -1,22 +1,12 @@
 package usb
 
 import (
-	"context"
 	"fmt"
 	"sync"
+	"syscall"
 	"time"
+	"unsafe"
 )
-
-// AsyncTransferManager handles asynchronous USB transfers
-type AsyncTransferManager struct {
-	handle     *DeviceHandle
-	transfers  map[*AsyncTransfer]*urbRequest
-	eventFd    int
-	ctx        context.Context
-	cancel     context.CancelFunc
-	mu         sync.RWMutex
-	running    bool
-}
 
 // AsyncTransfer represents an asynchronous USB transfer
 type AsyncTransfer struct {
@@ -25,14 +15,18 @@ type AsyncTransfer struct {
 	transferType TransferType
 	buffer       []byte
 	timeout      time.Duration
-	callback     AsyncTransferCallback
-	userdata     interface{}
-	status       TransferStatus
 	actualLength int
 	isoPackets   []IsoPacket
-	mu           sync.Mutex
-	completed    chan struct{}
-	manager      *AsyncTransferManager
+
+	// URB fields
+	urb       *URB
+	urbBuffer []byte // Holds URB struct (+ iso packets if needed)
+	submitted bool
+
+	// Auto-reaping support
+	reapErr  error
+	reaped   bool
+	reapCond *sync.Cond
 }
 
 // IsoPacket represents an isochronous packet
@@ -40,282 +34,262 @@ type IsoPacket struct {
 	Length       int
 	ActualLength int
 	Status       int
-	Buffer       []byte
 }
 
-// AsyncTransferCallback is called when transfer completes
-type AsyncTransferCallback func(transfer *AsyncTransfer)
-
-type urbRequest struct {
-	buffer []byte
+// NewBulkTransfer creates a new bulk transfer
+func (h *DeviceHandle) NewBulkTransfer(endpoint uint8, bufferSize int) (*AsyncTransfer, error) {
+	return h.newAsyncTransfer(endpoint, TransferTypeBulk, bufferSize, 0)
 }
 
-// NewAsyncTransferManager creates a new async transfer manager
-func (h *DeviceHandle) NewAsyncTransferManager() (*AsyncTransferManager, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	
+// NewInterruptTransfer creates a new interrupt transfer
+func (h *DeviceHandle) NewInterruptTransfer(endpoint uint8, bufferSize int) (*AsyncTransfer, error) {
+	return h.newAsyncTransfer(endpoint, TransferTypeInterrupt, bufferSize, 0)
+}
+
+// NewControlTransfer creates a new control transfer
+func (h *DeviceHandle) NewControlTransfer(bufferSize int) (*AsyncTransfer, error) {
+	return h.newAsyncTransfer(0, TransferTypeControl, bufferSize, 0)
+}
+
+// newAsyncTransfer creates a new asynchronous transfer
+func (h *DeviceHandle) newAsyncTransfer(endpoint uint8, transferType TransferType, bufferSize int, isoPackets int) (*AsyncTransfer, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
 	if h.closed {
 		return nil, ErrDeviceNotFound
 	}
-	
-	ctx, cancel := context.WithCancel(context.Background())
-	
-	manager := &AsyncTransferManager{
-		handle:    h,
-		transfers: make(map[*AsyncTransfer]*urbRequest),
-		ctx:       ctx,
-		cancel:    cancel,
-	}
-	
-	return manager, nil
-}
 
-// NewAsyncTransfer creates a new asynchronous transfer
-func (m *AsyncTransferManager) NewAsyncTransfer(endpoint uint8, transferType TransferType, bufferSize int, isoPackets int) *AsyncTransfer {
 	transfer := &AsyncTransfer{
-		handle:       m.handle,
+		handle:       h,
 		endpoint:     endpoint,
 		transferType: transferType,
 		buffer:       make([]byte, bufferSize),
 		timeout:      5 * time.Second,
-		status:       TransferCompleted,
-		completed:    make(chan struct{}, 1),
-		manager:      m,
+		reapCond:     sync.NewCond(&sync.Mutex{}),
 	}
-	
-	if transferType == TransferTypeIsochronous && isoPackets > 0 {
-		transfer.isoPackets = make([]IsoPacket, isoPackets)
-		packetSize := bufferSize / isoPackets
-		for i := range transfer.isoPackets {
-			transfer.isoPackets[i] = IsoPacket{
-				Length: packetSize,
-				Buffer: transfer.buffer[i*packetSize : (i+1)*packetSize],
-			}
-		}
-	}
-	
-	return transfer
-}
 
-// SetCallback sets the completion callback
-func (t *AsyncTransfer) SetCallback(callback AsyncTransferCallback) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.callback = callback
+	// Calculate URB size
+	urbSize := unsafe.Sizeof(URB{})
+	if transferType == TransferTypeIsochronous && isoPackets > 0 {
+		// Add space for iso packet descriptors
+		urbSize += uintptr(isoPackets) * unsafe.Sizeof(IsoPacketDescriptor{})
+		transfer.isoPackets = make([]IsoPacket, isoPackets)
+	}
+
+	// Allocate URB buffer
+	transfer.urbBuffer = make([]byte, urbSize)
+	transfer.urb = (*URB)(unsafe.Pointer(&transfer.urbBuffer[0]))
+
+	// Set up URB fields
+	switch transferType {
+	case TransferTypeBulk:
+		transfer.urb.Type = USBDEVFS_URB_TYPE_BULK
+	case TransferTypeInterrupt:
+		transfer.urb.Type = USBDEVFS_URB_TYPE_INTERRUPT
+	case TransferTypeControl:
+		transfer.urb.Type = USBDEVFS_URB_TYPE_CONTROL
+	case TransferTypeIsochronous:
+		transfer.urb.Type = USBDEVFS_URB_TYPE_ISO
+		transfer.urb.NumberOfPackets = int32(isoPackets)
+		transfer.urb.Flags = USBDEVFS_URB_ISO_ASAP
+	}
+
+	transfer.urb.Endpoint = endpoint
+	transfer.urb.Buffer = unsafe.Pointer(&transfer.buffer[0])
+	transfer.urb.BufferLength = int32(bufferSize)
+
+	return transfer, nil
 }
 
 // SetTimeout sets the transfer timeout
 func (t *AsyncTransfer) SetTimeout(timeout time.Duration) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.timeout = timeout
-}
-
-// SetUserData sets user data for the transfer
-func (t *AsyncTransfer) SetUserData(userdata interface{}) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.userdata = userdata
 }
 
 // GetStatus returns the transfer status
 func (t *AsyncTransfer) GetStatus() TransferStatus {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.status
+	t.waitForReaping()
+
+	if t.reapErr != nil {
+		if t.urb.Status == -int32(syscall.ETIMEDOUT) {
+			return TransferTimedOut
+		}
+		return TransferError
+	}
+	return TransferCompleted
 }
 
 // GetActualLength returns actual bytes transferred
 func (t *AsyncTransfer) GetActualLength() int {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.waitForReaping()
 	return t.actualLength
 }
 
 // GetBuffer returns the transfer buffer
 func (t *AsyncTransfer) GetBuffer() []byte {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.waitForReaping()
 	return t.buffer[:t.actualLength]
 }
 
 // GetIsoPackets returns isochronous packets
 func (t *AsyncTransfer) GetIsoPackets() []IsoPacket {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.waitForReaping()
 	return t.isoPackets
 }
 
 // Submit submits the transfer for execution
 func (t *AsyncTransfer) Submit() error {
-	t.manager.mu.Lock()
-	defer t.manager.mu.Unlock()
-	
-	if t.manager.handle.closed {
+	if t.submitted {
+		return fmt.Errorf("transfer already submitted")
+	}
+
+	t.handle.mu.RLock()
+	defer t.handle.mu.RUnlock()
+
+	if t.handle.closed {
 		return ErrDeviceNotFound
 	}
-	
-	// For now, simulate async operation with goroutine
-	// Real implementation would use Linux URBs
-	go t.executeTransfer()
-	
+
+	// Reset URB fields
+	t.urb.Status = 0
+	t.urb.ActualLength = 0
+	t.urb.ErrorCount = 0
+
+	// Set up iso packets if needed
+	if t.transferType == TransferTypeIsochronous && len(t.isoPackets) > 0 {
+		isoPackets := (*[1 << 16]IsoPacketDescriptor)(unsafe.Pointer(
+			uintptr(unsafe.Pointer(t.urb)) + unsafe.Sizeof(URB{})))
+		for i := range t.isoPackets {
+			isoPackets[i].Length = uint32(t.isoPackets[i].Length)
+			isoPackets[i].ActualLength = 0
+			isoPackets[i].Status = 0
+		}
+	}
+
+	// Submit URB to kernel
+	_, _, errno := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(t.handle.fd),
+		USBDEVFS_SUBMITURB,
+		uintptr(unsafe.Pointer(t.urb)),
+	)
+
+	if errno != 0 {
+		return fmt.Errorf("failed to submit URB: %v", errno)
+	}
+
+	t.submitted = true
+	t.reaped = false
+
+	// Register with centralized reaper
+	t.handle.registerURBCompletion(uintptr(unsafe.Pointer(t.urb)), func(err error) {
+		// Process URB completion
+		t.reapCond.L.Lock()
+		defer t.reapCond.L.Unlock()
+
+		t.reapErr = err
+
+		if err == nil {
+			t.actualLength = int(t.urb.ActualLength)
+
+			// Update iso packets if needed
+			if t.transferType == TransferTypeIsochronous && len(t.isoPackets) > 0 {
+				isoPackets := (*[1 << 16]IsoPacketDescriptor)(unsafe.Pointer(
+					uintptr(unsafe.Pointer(t.urb)) + unsafe.Sizeof(URB{})))
+				for i := range t.isoPackets {
+					t.isoPackets[i].ActualLength = int(isoPackets[i].ActualLength)
+					t.isoPackets[i].Status = int(isoPackets[i].Status)
+				}
+			}
+		}
+
+		// Clear submitted flag to allow resubmission
+		t.submitted = false
+		t.reaped = true
+		t.reapCond.Broadcast()
+	})
+
 	return nil
 }
 
 // Cancel cancels the transfer
 func (t *AsyncTransfer) Cancel() error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	
-	if t.status != TransferCompleted {
-		t.status = TransferCancelled
-		close(t.completed)
-		return nil
+	if !t.submitted {
+		return fmt.Errorf("transfer not submitted")
 	}
-	
+
+	t.handle.mu.RLock()
+	defer t.handle.mu.RUnlock()
+
+	if t.handle.closed {
+		return ErrDeviceNotFound
+	}
+
+	// Discard the URB
+	_, _, errno := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(t.handle.fd),
+		USBDEVFS_DISCARDURB,
+		uintptr(unsafe.Pointer(t.urb)),
+	)
+
+	if errno != 0 && errno != syscall.EINVAL {
+		return fmt.Errorf("failed to cancel URB: %v", errno)
+	}
+
 	return nil
 }
 
-// Wait waits for transfer completion
-func (t *AsyncTransfer) Wait(timeout time.Duration) error {
+// waitForReaping waits for the transfer to be reaped
+func (t *AsyncTransfer) waitForReaping() {
+	t.reapCond.L.Lock()
+	defer t.reapCond.L.Unlock()
+
+	for !t.reaped {
+		t.reapCond.Wait()
+	}
+}
+
+// Wait waits for transfer completion with timeout
+func (t *AsyncTransfer) Wait() error {
+	t.waitForReaping()
+	return t.reapErr
+}
+
+// WaitWithTimeout waits for transfer completion with timeout
+func (t *AsyncTransfer) WaitWithTimeout(timeout time.Duration) error {
+	done := make(chan error, 1)
+
+	go func() {
+		t.waitForReaping()
+		done <- t.reapErr
+	}()
+
 	select {
-	case <-t.completed:
-		return nil
+	case err := <-done:
+		return err
 	case <-time.After(timeout):
+		// Try to cancel the transfer
+		t.Cancel()
 		return ErrTimeout
 	}
 }
 
-// executeTransfer simulates async transfer execution
-func (t *AsyncTransfer) executeTransfer() {
-	defer func() {
-		select {
-		case t.completed <- struct{}{}:
-		default:
-		}
-	}()
-	
-	// Simulate transfer based on type
-	var err error
-	var n int
-	
-	switch t.transferType {
-	case TransferTypeControl:
-		// Control transfers need special handling
-		t.status = TransferError
-		return
-		
-	case TransferTypeBulk:
-		n, err = t.handle.BulkTransfer(t.endpoint, t.buffer, t.timeout)
-		
-	case TransferTypeInterrupt:
-		n, err = t.handle.InterruptTransfer(t.endpoint, t.buffer, t.timeout)
-		
-	case TransferTypeIsochronous:
-		// Isochronous transfer simulation
-		err = t.simulateIsochronousTransfer()
-		
-	default:
-		t.mu.Lock()
-		t.status = TransferError
-		t.mu.Unlock()
-		return
+// Fill fills the buffer with data (for OUT transfers)
+func (t *AsyncTransfer) Fill(data []byte) error {
+	if len(data) > len(t.buffer) {
+		return fmt.Errorf("data too large for buffer")
 	}
-	
-	t.mu.Lock()
-	if err != nil {
-		if err == ErrTimeout {
-			t.status = TransferTimedOut
-		} else {
-			t.status = TransferError
-		}
-	} else {
-		t.status = TransferCompleted
-		t.actualLength = n
-	}
-	t.mu.Unlock()
-	
-	// Call callback if set
-	if t.callback != nil {
-		t.callback(t)
-	}
+	copy(t.buffer, data)
+	// Update the buffer length for the actual data size
+	t.urb.BufferLength = int32(len(data))
+	return nil
 }
 
-// simulateIsochronousTransfer simulates isochronous transfer
-func (t *AsyncTransfer) simulateIsochronousTransfer() error {
-	// Simulate packet processing
-	totalBytes := 0
-	
+// SetIsoPacketLengths sets the length for all isochronous packets
+func (t *AsyncTransfer) SetIsoPacketLengths(length int) {
 	for i := range t.isoPackets {
-		packet := &t.isoPackets[i]
-		// Simulate receiving data
-		packet.ActualLength = packet.Length
-		packet.Status = 0
-		totalBytes += packet.ActualLength
+		t.isoPackets[i].Length = length
 	}
-	
-	t.actualLength = totalBytes
-	return nil
-}
-
-// HandleEvents processes pending transfer events
-func (m *AsyncTransferManager) HandleEvents(timeout time.Duration) error {
-	// In a real implementation, this would:
-	// 1. Check for completed URBs using epoll/select on usbfs
-	// 2. Process completed transfers
-	// 3. Call callbacks
-	
-	// Handle zero timeout (non-blocking check)
-	if timeout == 0 {
-		// Non-blocking check for completed transfers
-		// For now, just return immediately
-		return nil
-	}
-	
-	// For non-zero timeout, wait the specified duration
-	select {
-	case <-time.After(timeout):
-		return nil
-	case <-m.ctx.Done():
-		return m.ctx.Err()
-	}
-}
-
-// Start starts the async transfer manager
-func (m *AsyncTransferManager) Start() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	
-	if m.running {
-		return fmt.Errorf("manager already running")
-	}
-	
-	m.running = true
-	return nil
-}
-
-// Stop stops the async transfer manager
-func (m *AsyncTransferManager) Stop() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	
-	if !m.running {
-		return nil
-	}
-	
-	m.cancel()
-	m.running = false
-	
-	// Cancel all pending transfers
-	for transfer := range m.transfers {
-		transfer.Cancel()
-	}
-	
-	return nil
-}
-
-// Close closes the transfer manager
-func (m *AsyncTransferManager) Close() error {
-	return m.Stop()
 }

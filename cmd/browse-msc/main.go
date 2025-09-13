@@ -14,22 +14,22 @@ import (
 
 const (
 	// USB Mass Storage Class constants
-	MSC_CLASS           = 0x08
-	MSC_SUBCLASS_SCSI   = 0x06
-	MSC_PROTOCOL_BULK   = 0x50
+	MSC_CLASS         = 0x08
+	MSC_SUBCLASS_SCSI = 0x06
+	MSC_PROTOCOL_BULK = 0x50
 
 	// Command Block Wrapper signature
 	CBW_SIGNATURE = 0x43425355 // "USBC" in little-endian
 
-	// Command Status Wrapper signature  
+	// Command Status Wrapper signature
 	CSW_SIGNATURE = 0x53425355 // "USBS" in little-endian
 
 	// SCSI Commands
-	SCSI_INQUIRY       = 0x12
-	SCSI_READ_CAPACITY = 0x25
-	SCSI_READ_10       = 0x28
+	SCSI_INQUIRY         = 0x12
+	SCSI_READ_CAPACITY   = 0x25
+	SCSI_READ_10         = 0x28
 	SCSI_TEST_UNIT_READY = 0x00
-	SCSI_REQUEST_SENSE = 0x03
+	SCSI_REQUEST_SENSE   = 0x03
 )
 
 // Command Block Wrapper (CBW) for sending SCSI commands
@@ -53,34 +53,27 @@ type CSW struct {
 
 // MSCDevice wraps a USB device handle for Mass Storage operations
 type MSCDevice struct {
-	handle      *usb.DeviceHandle
-	epIn        uint8
-	epOut       uint8
-	tag         uint32
+	handle *usb.DeviceHandle
+	epIn   uint8
+	epOut  uint8
+	tag    uint32
 }
 
 func main() {
 	// Parse command-line flags
 	var (
-		vendorID  = flag.String("vid", "0781", "USB Vendor ID in hex (e.g., 0781 for SanDisk)")
-		productID = flag.String("pid", "5581", "USB Product ID in hex (e.g., 5581 for Ultra)")
+		vendorID    = flag.String("vid", "0781", "USB Vendor ID in hex (e.g., 0781 for SanDisk)")
+		productID   = flag.String("pid", "5581", "USB Product ID in hex (e.g., 5581 for Ultra)")
 		listDevices = flag.Bool("list", false, "List all USB Mass Storage devices")
 	)
 	flag.Parse()
 
 	fmt.Println("USB Mass Storage Browser")
 	fmt.Println("========================")
-	
-	// Create USB context
-	ctx, err := usb.NewContext()
-	if err != nil {
-		log.Fatal("Failed to create USB context:", err)
-	}
-	defer ctx.Close()
 
 	// If list flag is set, show all Mass Storage devices
 	if *listDevices {
-		listMassStorageDevices(ctx)
+		listMassStorageDevices()
 		return
 	}
 
@@ -94,13 +87,13 @@ func main() {
 	}
 
 	fmt.Printf("Looking for device VID:PID = %04x:%04x\n", vid, pid)
-	
+
 	// First, try to unbind the device from usb-storage driver if needed
 	fmt.Println("Preparing device access...")
 	unbindDevice()
-	
+
 	// Open the specified device
-	handle, err := ctx.OpenDevice(vid, pid)
+	handle, err := usb.OpenDevice(vid, pid)
 	if err != nil {
 		log.Fatalf("Failed to open device %04x:%04x: %v\n", vid, pid, err)
 		log.Fatal("Make sure the USB device is connected and you have permissions")
@@ -110,7 +103,7 @@ func main() {
 	fmt.Printf("✓ Found and opened USB device %04x:%04x\n", vid, pid)
 
 	// Get device descriptor for information
-	devices, err := ctx.GetDeviceList()
+	devices, err := usb.GetDeviceList()
 	if err != nil {
 		log.Fatal("Failed to get device list:", err)
 	}
@@ -154,10 +147,10 @@ func main() {
 	// Now claim the interface
 	err = handle.ClaimInterface(0)
 	if err != nil {
-		log.Fatal("Failed to claim interface. This might be because:\n" +
-			"1. The device is mounted (try: sudo umount /dev/sdX*)\n" +
-			"2. The usb-storage driver is using it\n" +
-			"3. Insufficient permissions\n" +
+		log.Fatal("Failed to claim interface. This might be because:\n"+
+			"1. The device is mounted (try: sudo umount /dev/sdX*)\n"+
+			"2. The usb-storage driver is using it\n"+
+			"3. Insufficient permissions\n"+
 			"Error:", err)
 	}
 	defer handle.ReleaseInterface(0)
@@ -195,7 +188,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Read Capacity failed:", err)
 	}
-	
+
 	totalSize := uint64(blockCount) * uint64(blockSize)
 	fmt.Printf("Blocks: %d\n", blockCount)
 	fmt.Printf("Block Size: %d bytes\n", blockSize)
@@ -207,21 +200,21 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to read block 0:", err)
 	}
-	
+
 	fmt.Println("First 512 bytes of Block 0:")
 	hexdump(block0[:512])
 
 	// Check for MBR signature
 	if len(block0) >= 512 && block0[510] == 0x55 && block0[511] == 0xAA {
 		fmt.Println("\n✓ Valid MBR signature found (0x55AA)")
-		
+
 		// Parse partition table
 		fmt.Println("\nPartition Table:")
 		for i := 0; i < 4; i++ {
 			offset := 446 + i*16
 			if block0[offset+4] != 0 { // Check if partition type is non-zero
-				fmt.Printf("Partition %d: Type=0x%02x, Start LBA=%d\n", 
-					i+1, 
+				fmt.Printf("Partition %d: Type=0x%02x, Start LBA=%d\n",
+					i+1,
 					block0[offset+4],
 					binary.LittleEndian.Uint32(block0[offset+8:offset+12]))
 			}
@@ -231,7 +224,7 @@ func main() {
 	// Try to read a FAT boot sector (typically at block 63 or 2048)
 	fmt.Println("\n--- Attempting to Read FAT Boot Sector ---")
 	possibleStarts := []uint32{63, 2048, 1} // Common partition start locations
-	
+
 	for _, start := range possibleStarts {
 		if start < blockCount {
 			fatBlock, err := msc.ReadBlock(start, blockSize)
@@ -244,8 +237,8 @@ func main() {
 						fmt.Println("FAT32 Boot Sector (first 256 bytes):")
 						hexdump(fatBlock[:256])
 						break
-					} else if bytes.Equal(fatBlock[54:59], []byte("FAT16")) || 
-							  bytes.Equal(fatBlock[54:59], []byte("FAT12")) {
+					} else if bytes.Equal(fatBlock[54:59], []byte("FAT16")) ||
+						bytes.Equal(fatBlock[54:59], []byte("FAT12")) {
 						fmt.Printf("\n✓ Found FAT16/12 filesystem at block %d\n", start)
 						fmt.Println("FAT Boot Sector (first 256 bytes):")
 						hexdump(fatBlock[:256])
@@ -266,11 +259,11 @@ func findMSCEndpoints(handle *usb.DeviceHandle) (uint8, uint8, error) {
 	// IN endpoint: 0x81
 	// OUT endpoint: 0x02
 	// But let's verify by reading the configuration
-	
+
 	// Mass Storage devices typically use:
 	// - Bulk IN endpoint (0x81 or similar)
 	// - Bulk OUT endpoint (0x02 or similar)
-	
+
 	return 0x81, 0x02, nil
 }
 
@@ -553,7 +546,7 @@ func bytesToStruct(data []byte, v interface{}) error {
 func unbindDevice() {
 	// Try to unbind any USB storage device from usb-storage driver
 	unbindPath := "/sys/bus/usb/drivers/usb-storage/unbind"
-	
+
 	// Try common device bindings across different buses
 	for bus := 1; bus <= 8; bus++ {
 		for dev := 1; dev <= 4; dev++ {
@@ -566,32 +559,32 @@ func unbindDevice() {
 			}
 		}
 	}
-	
+
 	// If we couldn't unbind, continue anyway - DetachKernelDriver might work
 }
 
 // listMassStorageDevices lists all USB Mass Storage devices
-func listMassStorageDevices(ctx *usb.Context) {
+func listMassStorageDevices() {
 	fmt.Println("\nSearching for USB Mass Storage devices...")
 	fmt.Println()
-	
-	devices, err := ctx.GetDeviceList()
+
+	devices, err := usb.GetDeviceList()
 	if err != nil {
 		log.Fatal("Failed to get device list:", err)
 	}
-	
+
 	found := false
 	for _, device := range devices {
 		// Check if it's a Mass Storage device
 		// Note: This is a simplified check - proper detection would need to
 		// parse configuration descriptors for interface class
 		if device.Descriptor.DeviceClass == MSC_CLASS ||
-		   (device.Descriptor.DeviceClass == 0 && // Class defined at interface level
-		    isMassStorageDevice(device)) {
+			(device.Descriptor.DeviceClass == 0 && // Class defined at interface level
+				isMassStorageDevice(device)) {
 			found = true
-			fmt.Printf("Device: VID=%04x PID=%04x\n", 
+			fmt.Printf("Device: VID=%04x PID=%04x\n",
 				device.Descriptor.VendorID, device.Descriptor.ProductID)
-			
+
 			// Try to get product name
 			if handle, err := device.Open(); err == nil {
 				if product, err := handle.GetStringDescriptor(device.Descriptor.ProductIndex); err == nil {
@@ -605,7 +598,7 @@ func listMassStorageDevices(ctx *usb.Context) {
 			fmt.Println()
 		}
 	}
-	
+
 	if !found {
 		fmt.Println("No USB Mass Storage devices found.")
 		fmt.Println("Note: Some devices may not be detected if they're in use by the kernel.")
@@ -624,12 +617,12 @@ func isMassStorageDevice(device *usb.Device) bool {
 		0x154b, // PNY
 		0x0951, // Kingston
 	}
-	
+
 	for _, vendorID := range knownStorageVendors {
 		if device.Descriptor.VendorID == vendorID {
 			return true
 		}
 	}
-	
+
 	return false
 }

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	
+
 	usb "github.com/kevmo314/go-usb"
 )
 
@@ -17,7 +17,7 @@ var (
 	verbose    = flag.Bool("v", false, "Verbose output")
 	tree       = flag.Bool("t", false, "Tree display")
 	device     = flag.String("d", "", "Show only devices with specified VID:PID (e.g., 1234:5678)")
-	bus        = flag.Int("s", -1, "Show only devices on specified bus")
+	busDevice  = flag.String("s", "", "Show only devices with specified [[bus]:][devnum] (e.g., 1:6, :6, 1:)")
 	version    = flag.Bool("V", false, "Show version")
 	devicePath = flag.String("D", "", "Show information for specific device path")
 )
@@ -29,29 +29,22 @@ type usbDevice struct {
 
 func main() {
 	flag.Parse()
-	
+
 	if *version {
 		fmt.Printf("lsusb (go-usb) %s\n", usb.GetVersion())
 		fmt.Println("Copyright (C) 2024 go-usb project")
 		return
 	}
-	
-	// Create USB context
-	ctx, err := usb.NewContext()
-	if err != nil {
-		log.Fatalf("Failed to create USB context: %v", err)
-	}
-	defer ctx.Close()
-	
+
 	// Get device list
-	devices, err := ctx.GetDeviceList()
+	devices, err := usb.GetDeviceList()
 	if err != nil {
 		log.Fatalf("Failed to get device list: %v", err)
 	}
-	
+
 	// Filter devices if needed
 	filteredDevices := filterDevices(devices)
-	
+
 	// Sort devices by bus and address
 	sort.Slice(filteredDevices, func(i, j int) bool {
 		if filteredDevices[i].Bus != filteredDevices[j].Bus {
@@ -59,7 +52,7 @@ func main() {
 		}
 		return filteredDevices[i].Address < filteredDevices[j].Address
 	})
-	
+
 	if *tree {
 		displayTree(filteredDevices)
 	} else if *verbose {
@@ -71,18 +64,42 @@ func main() {
 
 func filterDevices(devices []*usb.Device) []*usb.Device {
 	var filtered []*usb.Device
-	
+
 	for _, dev := range devices {
-		// Filter by bus
-		if *bus >= 0 && dev.Bus != uint8(*bus) {
-			continue
+		// Filter by bus:device
+		if *busDevice != "" {
+			var busNum, devNum int = -1, -1
+
+			// Parse [[bus]:][devnum] format
+			if strings.Contains(*busDevice, ":") {
+				parts := strings.Split(*busDevice, ":")
+				if len(parts) == 2 {
+					if parts[0] != "" {
+						busNum, _ = strconv.Atoi(parts[0])
+					}
+					if parts[1] != "" {
+						devNum, _ = strconv.Atoi(parts[1])
+					}
+				}
+			} else {
+				// No colon means it's just the device number
+				devNum, _ = strconv.Atoi(*busDevice)
+			}
+
+			// Apply filters
+			if busNum >= 0 && dev.Bus != uint8(busNum) {
+				continue
+			}
+			if devNum >= 0 && dev.Address != uint8(devNum) {
+				continue
+			}
 		}
-		
+
 		// Filter by device path
 		if *devicePath != "" && dev.Path != *devicePath {
 			continue
 		}
-		
+
 		// Filter by VID:PID
 		if *device != "" {
 			parts := strings.Split(*device, ":")
@@ -95,27 +112,27 @@ func filterDevices(devices []*usb.Device) []*usb.Device {
 				}
 			}
 		}
-		
+
 		filtered = append(filtered, dev)
 	}
-	
+
 	return filtered
 }
 
 func displaySimple(devices []*usb.Device) {
 	for _, dev := range devices {
 		desc := dev.Descriptor
-		
+
 		vendorName := usb.GetVendorName(desc.VendorID)
 		productName := usb.GetProductName(desc.VendorID, desc.ProductID)
-		
+
 		// Try to get from sysfs first (faster)
 		if productName == "" {
 			if sysfsProduct := dev.GetProductFromSysfs(); sysfsProduct != "" {
 				productName = sysfsProduct
 			}
 		}
-		
+
 		fmt.Printf("Bus %03d Device %03d: ID %04x:%04x %s %s\n",
 			dev.Bus, dev.Address,
 			desc.VendorID, desc.ProductID,
@@ -126,11 +143,11 @@ func displaySimple(devices []*usb.Device) {
 func displayVerbose(devices []*usb.Device) {
 	for _, dev := range devices {
 		desc := dev.Descriptor
-		
+
 		fmt.Printf("\nBus %03d Device %03d: ID %04x:%04x\n",
 			dev.Bus, dev.Address,
 			desc.VendorID, desc.ProductID)
-		
+
 		fmt.Printf("Device Descriptor:\n")
 		fmt.Printf("  bLength             %5d\n", desc.Length)
 		fmt.Printf("  bDescriptorType     %5d\n", desc.DescriptorType)
@@ -142,7 +159,7 @@ func displayVerbose(devices []*usb.Device) {
 			fmt.Printf("  bDeviceClass        %5d\n", desc.DeviceClass)
 		}
 		fmt.Printf("  bDeviceSubClass     %5d\n", desc.DeviceSubClass)
-		
+
 		protocolDesc := getProtocolDescription(desc.DeviceClass, desc.DeviceProtocol)
 		if protocolDesc != "" {
 			fmt.Printf("  bDeviceProtocol     %5d %s\n", desc.DeviceProtocol, protocolDesc)
@@ -157,38 +174,38 @@ func displayVerbose(devices []*usb.Device) {
 		fmt.Printf("  iProduct            %5d\n", desc.ProductIndex)
 		fmt.Printf("  iSerialNumber       %5d\n", desc.SerialNumberIndex)
 		fmt.Printf("  bNumConfigurations  %5d\n", desc.NumConfigurations)
-		
+
 		// Try to open device for more info
 		handle, err := dev.Open()
 		if err == nil {
 			defer handle.Close()
-			
+
 			// Get string descriptors
 			if desc.ManufacturerIndex > 0 {
 				if str, err := handle.GetStringDescriptor(desc.ManufacturerIndex); err == nil && str != "" {
 					fmt.Printf("  Manufacturer: %s\n", str)
 				}
 			}
-			
+
 			if desc.ProductIndex > 0 {
 				if str, err := handle.GetStringDescriptor(desc.ProductIndex); err == nil && str != "" {
 					fmt.Printf("  Product: %s\n", str)
 				}
 			}
-			
+
 			if desc.SerialNumberIndex > 0 {
 				if str, err := handle.GetStringDescriptor(desc.SerialNumberIndex); err == nil && str != "" {
 					fmt.Printf("  Serial Number: %s\n", str)
 				}
 			}
-			
+
 			// Get configuration descriptor
 			for i := uint8(0); i < desc.NumConfigurations; i++ {
 				config, interfaces, endpoints, err := handle.ReadConfigDescriptor(i)
 				if err != nil {
 					continue
 				}
-				
+
 				fmt.Printf("  Configuration Descriptor:\n")
 				fmt.Printf("    bLength             %5d\n", config.Length)
 				fmt.Printf("    bDescriptorType     %5d\n", config.DescriptorType)
@@ -197,7 +214,7 @@ func displayVerbose(devices []*usb.Device) {
 				fmt.Printf("    bConfigurationValue %5d\n", config.ConfigurationValue)
 				fmt.Printf("    iConfiguration      %5d\n", config.ConfigurationIndex)
 				fmt.Printf("    bmAttributes         0x%02x\n", config.Attributes)
-				
+
 				if config.Attributes&0x80 != 0 {
 					fmt.Printf("      (Bus Powered)\n")
 				}
@@ -207,9 +224,9 @@ func displayVerbose(devices []*usb.Device) {
 				if config.Attributes&0x20 != 0 {
 					fmt.Printf("      Remote Wakeup\n")
 				}
-				
+
 				fmt.Printf("    MaxPower            %5dmA\n", config.MaxPower*2)
-				
+
 				// Display interfaces
 				for _, iface := range interfaces {
 					fmt.Printf("    Interface Descriptor:\n")
@@ -223,14 +240,14 @@ func displayVerbose(devices []*usb.Device) {
 					fmt.Printf("      bInterfaceProtocol  %5d\n", iface.InterfaceProtocol)
 					fmt.Printf("      iInterface          %5d\n", iface.InterfaceIndex)
 				}
-				
+
 				// Display endpoints
 				for _, ep := range endpoints {
 					fmt.Printf("      Endpoint Descriptor:\n")
 					fmt.Printf("        bLength             %5d\n", ep.Length)
 					fmt.Printf("        bDescriptorType     %5d\n", ep.DescriptorType)
-					fmt.Printf("        bEndpointAddress     0x%02x  EP %d %s\n", 
-						ep.EndpointAddr, 
+					fmt.Printf("        bEndpointAddress     0x%02x  EP %d %s\n",
+						ep.EndpointAddr,
 						ep.EndpointAddr&0x7f,
 						getEndpointDirection(ep.EndpointAddr))
 					fmt.Printf("        bmAttributes         0x%02x\n", ep.Attributes)
@@ -253,7 +270,7 @@ func displayTree(devices []*usb.Device) {
 	for _, dev := range devices {
 		busMap[dev.Bus] = append(busMap[dev.Bus], dev)
 	}
-	
+
 	// Sort buses
 	var buses []uint8
 	for bus := range busMap {
@@ -262,20 +279,20 @@ func displayTree(devices []*usb.Device) {
 	sort.Slice(buses, func(i, j int) bool {
 		return buses[i] < buses[j]
 	})
-	
+
 	// Display tree in lsusb format
 	for _, bus := range buses {
 		busDevices := busMap[bus]
-		
+
 		// Sort devices by address
 		sort.Slice(busDevices, func(i, j int) bool {
 			return busDevices[i].Address < busDevices[j].Address
 		})
-		
+
 		// Find root hub
 		var rootHub *usb.Device
 		var otherDevices []*usb.Device
-		
+
 		for _, dev := range busDevices {
 			if dev.Address == 1 && dev.Descriptor.DeviceClass == 9 {
 				rootHub = dev
@@ -283,14 +300,14 @@ func displayTree(devices []*usb.Device) {
 				otherDevices = append(otherDevices, dev)
 			}
 		}
-		
+
 		if rootHub != nil {
 			speed := getSpeedString(rootHub)
 			maxPorts := getMaxPorts(rootHub)
-			
+
 			fmt.Printf("/:  Bus %03d.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/%dp, %s\n",
 				bus, maxPorts, speed)
-				
+
 			// Display connected devices
 			for _, dev := range otherDevices {
 				displayDeviceTree(dev, "    ")
@@ -298,7 +315,6 @@ func displayTree(devices []*usb.Device) {
 		}
 	}
 }
-
 
 func getEndpointDirection(addr uint8) string {
 	if addr&0x80 != 0 {
@@ -387,7 +403,7 @@ func getSpeedString(dev *usb.Device) string {
 			return speed + "M"
 		}
 	}
-	
+
 	// Fallback based on USB version
 	version := dev.Descriptor.USBVersion
 	if version >= 0x0300 {
@@ -423,13 +439,13 @@ func getSysfsDeviceName(dev *usb.Device) string {
 func displayDeviceTree(dev *usb.Device, indent string) {
 	className := getDeviceClassName(dev.Descriptor.DeviceClass)
 	speed := getSpeedString(dev)
-	
+
 	// For now, use a simplified port number (would need proper topology parsing)
 	portNum := int(dev.Address) - 1
 	if portNum < 1 {
 		portNum = 1
 	}
-	
+
 	fmt.Printf("%s|__ Port %03d: Dev %03d, If 0, Class=%s, Driver=[unknown], %s\n",
 		indent, portNum, dev.Address, className, speed)
 }
@@ -447,7 +463,7 @@ func getDeviceClassName(class uint8) string {
 	case 5:
 		return "Physical"
 	case 6:
-		return "Image" 
+		return "Image"
 	case 7:
 		return "Printer"
 	case 8:

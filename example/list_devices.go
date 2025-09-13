@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	
+
 	usb "github.com/kevmo314/go-usb"
 )
 
@@ -13,27 +13,15 @@ func main() {
 	if os.Getuid() != 0 {
 		fmt.Println("Warning: This program may require root privileges to access USB devices")
 	}
-	
-	// Create USB context
-	ctx, err := usb.NewContext()
-	if err != nil {
-		log.Fatalf("Failed to create USB context: %v", err)
-	}
-	defer ctx.Close()
-	
-	// Enable debug mode if verbose flag is set
-	if len(os.Args) > 1 && os.Args[1] == "-v" {
-		ctx.SetDebug(true)
-	}
-	
+
 	// Get device list
-	devices, err := ctx.GetDeviceList()
+	devices, err := usb.GetDeviceList()
 	if err != nil {
 		log.Fatalf("Failed to get device list: %v", err)
 	}
-	
+
 	fmt.Printf("Found %d USB devices:\n\n", len(devices))
-	
+
 	// List all devices
 	for i, dev := range devices {
 		desc := dev.Descriptor
@@ -46,47 +34,47 @@ func main() {
 		fmt.Printf("  Class:       %02x\n", desc.DeviceClass)
 		fmt.Printf("  SubClass:    %02x\n", desc.DeviceSubClass)
 		fmt.Printf("  Protocol:    %02x\n", desc.DeviceProtocol)
-		
+
 		// Try to open device and get strings
 		handle, err := dev.Open()
 		if err == nil {
 			defer handle.Close()
-			
+
 			if desc.ManufacturerIndex > 0 {
 				if manufacturer, err := handle.GetStringDescriptor(desc.ManufacturerIndex); err == nil {
 					fmt.Printf("  Manufacturer: %s\n", manufacturer)
 				}
 			}
-			
+
 			if desc.ProductIndex > 0 {
 				if product, err := handle.GetStringDescriptor(desc.ProductIndex); err == nil {
 					fmt.Printf("  Product:     %s\n", product)
 				}
 			}
-			
+
 			if desc.SerialNumberIndex > 0 {
 				if serial, err := handle.GetStringDescriptor(desc.SerialNumberIndex); err == nil {
 					fmt.Printf("  Serial:      %s\n", serial)
 				}
 			}
-			
+
 			// Get configuration info
 			config, interfaces, endpoints, err := handle.ReadConfigDescriptor(0)
 			if err == nil {
 				fmt.Printf("  Configuration:\n")
 				fmt.Printf("    Interfaces: %d\n", config.NumInterfaces)
 				fmt.Printf("    MaxPower:   %dmA\n", config.MaxPower*2)
-				
+
 				if len(interfaces) > 0 {
 					fmt.Printf("  Interfaces:\n")
 					for _, iface := range interfaces {
 						fmt.Printf("    Interface %d: Class=%02x SubClass=%02x Protocol=%02x Endpoints=%d\n",
-							iface.InterfaceNumber, iface.InterfaceClass, 
+							iface.InterfaceNumber, iface.InterfaceClass,
 							iface.InterfaceSubClass, iface.InterfaceProtocol,
 							iface.NumEndpoints)
 					}
 				}
-				
+
 				if len(endpoints) > 0 {
 					fmt.Printf("  Endpoints:\n")
 					for _, ep := range endpoints {
@@ -113,7 +101,7 @@ func main() {
 		} else if err == usb.ErrPermissionDenied {
 			fmt.Printf("  (Permission denied - run as root for more details)\n")
 		}
-		
+
 		fmt.Println()
 	}
 }
