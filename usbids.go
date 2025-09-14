@@ -267,25 +267,3 @@ func ProductName(vid, pid uint16) string {
 func ClassName(class uint8) string {
 	return globalUSBIDs.ClassName(class)
 }
-
-// Add method to Device to get string descriptors from sysfs
-func (d *Device) ManufacturerFromSysfs() string {
-	if d.sysfsStrings != nil {
-		return d.sysfsStrings.Manufacturer
-	}
-	return ""
-}
-
-func (d *Device) ProductFromSysfs() string {
-	if d.sysfsStrings != nil {
-		return d.sysfsStrings.Product
-	}
-	return ""
-}
-
-func (d *Device) SerialFromSysfs() string {
-	if d.sysfsStrings != nil {
-		return d.sysfsStrings.Serial
-	}
-	return ""
-}

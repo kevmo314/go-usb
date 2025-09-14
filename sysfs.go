@@ -155,7 +155,7 @@ func (s *SysfsDevice) ToUSBDevice() *Device {
 		Path:    fmt.Sprintf("/dev/bus/usb/%03d/%03d", s.BusNum, s.DevNum),
 		Bus:     s.BusNum,
 		Address: s.DevNum,
-		sysfsStrings: &SysfsStrings{
+		SysfsStrings: &SysfsStrings{
 			Manufacturer: s.Manufacturer,
 			Product:      s.Product,
 			Serial:       s.Serial,

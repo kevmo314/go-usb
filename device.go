@@ -214,10 +214,7 @@ type Device struct {
 	Address      uint8
 	Descriptor   DeviceDescriptor
 	Configs      []RawConfigDescriptor
-	sysfsStrings *SysfsStrings
-
-	handle *DeviceHandle
-	mu     sync.RWMutex
+	SysfsStrings *SysfsStrings
 }
 
 // SysfsStrings holds cached sysfs string descriptors
@@ -241,13 +238,6 @@ type DeviceHandle struct {
 }
 
 func (d *Device) Open() (*DeviceHandle, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if d.handle != nil && !d.handle.closed {
-		return nil, ErrDeviceBusy
-	}
-
 	fd, err := syscall.Open(d.Path, syscall.O_RDWR, 0)
 	if err != nil {
 		if err == syscall.EACCES {
@@ -256,16 +246,13 @@ func (d *Device) Open() (*DeviceHandle, error) {
 		return nil, fmt.Errorf("failed to open device: %w", err)
 	}
 
-	handle := &DeviceHandle{
+	return &DeviceHandle{
 		device:        d,
 		fd:            fd,
 		claimedIfaces: make(map[uint8]bool),
 		closed:        false,
 		reapMap:       make(map[uintptr]func(error)),
-	}
-
-	d.handle = handle
-	return handle, nil
+	}, nil
 }
 
 func (h *DeviceHandle) Close() error {
@@ -282,7 +269,6 @@ func (h *DeviceHandle) Close() error {
 
 	err := syscall.Close(h.fd)
 	h.closed = true
-	h.device.handle = nil
 
 	return err
 }
@@ -1340,15 +1326,11 @@ func WrapSysDevice(fd int) (*DeviceHandle, error) {
 	}
 
 	// Create DeviceHandle with the provided fd
-	handle := &DeviceHandle{
+	return &DeviceHandle{
 		device:        device,
 		fd:            fd,
 		claimedIfaces: make(map[uint8]bool),
 		closed:        false,
 		reapMap:       make(map[uintptr]func(error)),
-	}
-
-	device.handle = handle
-
-	return handle, nil
+	}, nil
 }

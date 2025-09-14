@@ -22,11 +22,6 @@ var (
 	devicePath = flag.String("D", "", "Show information for specific device path")
 )
 
-type usbDevice struct {
-	dev    *usb.Device
-	handle *usb.DeviceHandle
-}
-
 func main() {
 	flag.Parse()
 
@@ -127,8 +122,8 @@ func displaySimple(devices []*usb.Device) {
 		productName := usb.ProductName(desc.VendorID, desc.ProductID)
 
 		// Try to get from sysfs first (faster)
-		if productName == "" {
-			if sysfsProduct := dev.ProductFromSysfs(); sysfsProduct != "" {
+		if productName == "" && dev.SysfsStrings != nil {
+			if sysfsProduct := dev.SysfsStrings.Product; sysfsProduct != "" {
 				productName = sysfsProduct
 			}
 		}
@@ -368,9 +363,10 @@ func getUsageType(attr uint8) string {
 func getProtocolDescription(class, protocol uint8) string {
 	switch class {
 	case 9: // Hub
-		if protocol == 1 {
+		switch protocol {
+		case 1:
 			return "Single TT"
-		} else if protocol == 2 {
+		case 2:
 			return "TT per port"
 		}
 	case 0xef: // Miscellaneous Device
