@@ -32,6 +32,113 @@ type Interface struct {
 	AltSettings []InterfaceAltSetting
 }
 
+func (i *Interface) String() string {
+	return fmt.Sprintf("Interface: %d, %d alternate settings", i.InterfaceNumber, len(i.AltSettings))
+}
+
+// InterfaceAltSetting represents an interface descriptor with its endpoints
+// Similar to libusb_interface_descriptor
+type InterfaceAltSetting struct {
+	// Standard interface descriptor fields
+	Length            uint8
+	DescriptorType    uint8
+	InterfaceNumber   uint8
+	AlternateSetting  uint8
+	NumEndpoints      uint8
+	InterfaceClass    uint8
+	InterfaceSubClass uint8
+	InterfaceProtocol uint8
+	InterfaceIndex    uint8
+
+	// Parsed endpoints
+	Endpoints []Endpoint
+
+	// Extra descriptors (e.g., class-specific descriptors)
+	Extra []byte
+}
+
+// Endpoint represents a parsed endpoint descriptor
+// Similar to libusb_endpoint_descriptor
+
+
+// ConfigDescriptor represents a parsed USB configuration descriptor
+// Similar to libusb_config_descriptor
+type ConfigDescriptor struct {
+	// Standard config descriptor fields
+	Length             uint8
+	DescriptorType     uint8
+	TotalLength        uint16
+	NumInterfaces      uint8
+	ConfigurationValue uint8
+	ConfigurationIndex uint8
+	Attributes         uint8
+	MaxPower           uint8
+
+	// Parsed interfaces
+	Interfaces []Interface
+
+	// Extra descriptors not parsed into the structure
+	Extra []byte
+}
+
+// Interface represents a USB interface with all its alternate settings
+// Similar to libusb_interface
+type Interface struct {
+
+import (
+	"encoding/binary"
+	"fmt"
+)
+
+// ConfigDescriptor represents a parsed USB configuration descriptor
+// Similar to libusb_config_descriptor
+type ConfigDescriptor struct {
+	// Standard config descriptor fields
+	Length             uint8
+	DescriptorType     uint8
+	TotalLength        uint16
+	NumInterfaces      uint8
+	ConfigurationValue uint8
+	ConfigurationIndex uint8
+	Attributes         uint8
+	MaxPower           uint8
+
+	// Parsed interfaces
+	Interfaces []Interface
+
+	// Extra descriptors not parsed into the structure
+	Extra []byte
+}
+
+// Interface represents a USB interface with all its alternate settings
+
+// ConfigDescriptor represents a parsed USB configuration descriptor
+// Similar to libusb_config_descriptor
+type ConfigDescriptor struct {
+	// Standard config descriptor fields
+	Length             uint8
+	DescriptorType     uint8
+	TotalLength        uint16
+	NumInterfaces      uint8
+	ConfigurationValue uint8
+	ConfigurationIndex uint8
+	Attributes         uint8
+	MaxPower           uint8
+
+	// Parsed interfaces
+	Interfaces []Interface
+
+	// Extra descriptors not parsed into the structure
+	Extra []byte
+}
+
+// Interface represents a USB interface with all its alternate settings
+// Similar to libusb_interface
+type Interface struct {
+	// Array of alternate settings for this interface
+	AltSettings []InterfaceAltSetting
+}
+
 // InterfaceAltSetting represents an interface descriptor with its endpoints
 // Similar to libusb_interface_descriptor
 type InterfaceAltSetting struct {
@@ -227,7 +334,7 @@ func (c *ConfigDescriptor) Unmarshal(data []byte) error {
 
 	// Convert map to sorted slice
 	c.Interfaces = make([]Interface, 0, len(interfaceMap))
-	for i := range uint8(255) {
+	for i := uint8(0); i < 255; i++ {
 		if iface, exists := interfaceMap[i]; exists {
 			c.Interfaces = append(c.Interfaces, *iface)
 		}

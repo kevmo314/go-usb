@@ -1,10 +1,12 @@
 # github.com/kevmo314/go-usb
 
-A pure Go library for USB device communication, providing a libusb-like interface without C dependencies. This library enables direct USB device access through the Linux kernel's usbfs interface.
+A cross-platform Go library for USB device communication, providing a libusb-like interface. On Linux, it uses the kernel's usbfs interface directly. On macOS, it uses the native IOKit framework.
 
 ## Features
 
-- Pure Go implementation (no CGO or libusb dependency)
+- Cross-platform support (Linux and macOS)
+- Pure Go implementation on Linux (no libusb dependency)
+- Native IOKit integration on macOS
 - Device enumeration and management
 - Control, bulk, interrupt, and isochronous transfers
 - Synchronous and asynchronous transfer operations
@@ -21,9 +23,11 @@ go get github.com/kevmo314/go-usb
 
 ## Requirements
 
-- Linux operating system (uses usbfs)
-- Go 1.18 or higher
-- Appropriate permissions to access USB devices (typically requires root or udev rules)
+- Linux or macOS operating system
+- Go 1.21 or higher
+- Appropriate permissions to access USB devices:
+  - Linux: Typically requires root or udev rules
+  - macOS: May require entitlements or running with elevated privileges
 
 ## Quick Start
 
@@ -172,14 +176,16 @@ completedTransfer, err := handle.ReapTransfer(time.Second)
 
 ## Permissions
 
-USB device access typically requires elevated privileges. You have several options:
+USB device access typically requires elevated privileges.
 
-### Run as root
+### Linux
+
+#### Run as root
 ```bash
 sudo go run main.go
 ```
 
-### Create udev rules
+#### Create udev rules
 Create a file `/etc/udev/rules.d/99-usb.rules`:
 ```
 # Allow access to specific device
@@ -194,6 +200,19 @@ Then reload udev:
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 ```
+
+### macOS
+
+#### Run with elevated privileges
+```bash
+sudo go run main.go
+```
+
+#### Code signing and entitlements
+For distribution, your application may need:
+- Code signing with a valid Developer ID
+- USB entitlements in your app's Info.plist
+- User approval in System Settings > Privacy & Security
 
 ## Included Tools
 
@@ -214,12 +233,14 @@ The repository includes several command-line tools and examples in the `cmd/` di
 
 ## Limitations
 
-- Linux only (uses usbfs interface)
+- Linux and macOS only (Windows support not yet implemented)
 - Requires appropriate permissions for USB device access
-- No hotplug support (can be implemented with udev monitoring)
+- No hotplug support (can be implemented with platform-specific monitoring)
+- Async transfers on macOS require CFRunLoop integration
 
 ## Resources
 
 - [USB 2.0 Specification](https://www.usb.org/document-library/usb-20-specification)
 - [Linux usbfs Documentation](https://www.kernel.org/doc/html/latest/driver-api/usb/index.html)
+- [macOS IOKit USB Documentation](https://developer.apple.com/documentation/iokit)
 - [libusb Documentation](https://libusb.info/)
