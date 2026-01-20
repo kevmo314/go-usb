@@ -118,9 +118,9 @@ func (h *DeviceHandle) SSUSBDeviceCapabilityDescriptor() (*SuperSpeedUSBCapabili
 	if err != nil {
 		return nil, err
 	}
-	
+
 	_ = bos // unused
-	
+
 	// Look for SuperSpeed capability
 	for _, cap := range caps {
 		if cap.DevCapabilityType == 0x03 { // SuperSpeed USB
@@ -132,7 +132,7 @@ func (h *DeviceHandle) SSUSBDeviceCapabilityDescriptor() (*SuperSpeedUSBCapabili
 			}, nil
 		}
 	}
-	
+
 	return nil, fmt.Errorf("SuperSpeed USB capability not found")
 }
 
@@ -142,9 +142,9 @@ func (h *DeviceHandle) USB20ExtensionDescriptor() (*USB2ExtensionCapability, err
 	if err != nil {
 		return nil, err
 	}
-	
+
 	_ = bos // unused
-	
+
 	// Look for USB 2.0 extension capability
 	for _, cap := range caps {
 		if cap.DevCapabilityType == 0x02 { // USB 2.0 extension
@@ -156,7 +156,7 @@ func (h *DeviceHandle) USB20ExtensionDescriptor() (*USB2ExtensionCapability, err
 			}, nil
 		}
 	}
-	
+
 	return nil, fmt.Errorf("USB 2.0 extension capability not found")
 }
 
@@ -176,11 +176,11 @@ func (h *DeviceHandle) ReadConfigDescriptor(index uint8) (*ConfigDescriptor, []I
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	
+
 	// Flatten interfaces and endpoints for backward compatibility
 	var interfaces []InterfaceDescriptor
 	var endpoints []EndpointDescriptor
-	
+
 	for _, iface := range config.Interfaces {
 		for _, altSetting := range iface.AltSettings {
 			// Convert InterfaceAltSetting to InterfaceDescriptor
@@ -195,7 +195,7 @@ func (h *DeviceHandle) ReadConfigDescriptor(index uint8) (*ConfigDescriptor, []I
 				InterfaceProtocol: altSetting.InterfaceProtocol,
 				InterfaceIndex:    altSetting.InterfaceIndex,
 			})
-			
+
 			for _, ep := range altSetting.Endpoints {
 				// Convert Endpoint to EndpointDescriptor
 				endpoints = append(endpoints, EndpointDescriptor{
@@ -209,7 +209,7 @@ func (h *DeviceHandle) ReadConfigDescriptor(index uint8) (*ConfigDescriptor, []I
 			}
 		}
 	}
-	
+
 	return config, interfaces, endpoints, nil
 }
 

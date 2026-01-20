@@ -12,16 +12,16 @@ var ErrTimeout = fmt.Errorf("transfer timed out")
 func (h *DeviceHandle) ControlTransfer(requestType, request uint8, value, index uint16, data []byte, timeout time.Duration) (int, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	if h.closed {
 		return 0, fmt.Errorf("device is closed")
 	}
-	
+
 	timeoutMs := uint32(timeout.Milliseconds())
 	if timeoutMs == 0 {
 		timeoutMs = 5000 // Default 5 second timeout
 	}
-	
+
 	return h.devInterface.ControlTransfer(requestType, request, value, index, data, timeoutMs)
 }
 
@@ -29,11 +29,11 @@ func (h *DeviceHandle) ControlTransfer(requestType, request uint8, value, index 
 func (h *DeviceHandle) BulkTransfer(endpoint uint8, data []byte, timeout time.Duration) (int, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	if h.closed {
 		return 0, fmt.Errorf("device is closed")
 	}
-	
+
 	// Determine interface from endpoint
 	// This is simplified - need to track which interface owns which endpoint
 	var intf *IOUSBInterfaceInterface
@@ -41,18 +41,18 @@ func (h *DeviceHandle) BulkTransfer(endpoint uint8, data []byte, timeout time.Du
 		intf = i
 		break
 	}
-	
+
 	if intf == nil {
 		// No interface claimed, try to auto-claim based on endpoint
 		// In a real implementation, we'd need to properly map endpoints to interfaces
 		return 0, fmt.Errorf("no interface claimed for endpoint %02x", endpoint)
 	}
-	
+
 	timeoutMs := uint32(timeout.Milliseconds())
 	if timeoutMs == 0 {
 		timeoutMs = 5000 // Default 5 second timeout
 	}
-	
+
 	// Determine direction from endpoint address
 	if endpoint&0x80 != 0 {
 		// IN endpoint
@@ -112,28 +112,28 @@ func (t *Transfer) GetUserData() interface{} {
 func (t *Transfer) Submit() error {
 	// Simplified synchronous implementation
 	// A full implementation would use async IOKit APIs
-	
+
 	var n int
 	var err error
-	
+
 	switch t.transferType {
 	case TransferTypeControl:
 		// Control transfers would need additional setup packet data
 		return fmt.Errorf("async control transfers not yet implemented")
-		
+
 	case TransferTypeBulk:
 		n, err = t.handle.BulkTransfer(t.endpoint, t.buffer, 5*time.Second)
-		
+
 	case TransferTypeInterrupt:
 		n, err = t.handle.InterruptTransfer(t.endpoint, t.buffer, 5*time.Second)
-		
+
 	case TransferTypeIsochronous:
 		return fmt.Errorf("isochronous transfers not yet implemented")
-		
+
 	default:
 		return fmt.Errorf("unknown transfer type")
 	}
-	
+
 	t.actualLength = n
 	if err != nil {
 		if err == ErrTimeout {
@@ -144,12 +144,12 @@ func (t *Transfer) Submit() error {
 	} else {
 		t.status = TransferCompleted
 	}
-	
+
 	// Call callback if set
 	if t.callback != nil {
 		t.callback(t)
 	}
-	
+
 	return err
 }
 
@@ -194,18 +194,18 @@ func (h *DeviceHandle) ReapTransfer(timeout time.Duration) (*Transfer, error) {
 
 // URB structure for macOS (compatibility)
 type URB struct {
-	Type          uint8
-	Endpoint      uint8
-	Status        int32
-	Flags         uint32
-	Buffer        uintptr
-	BufferLength  int32
-	ActualLength  int32
-	StartFrame    int32
+	Type            uint8
+	Endpoint        uint8
+	Status          int32
+	Flags           uint32
+	Buffer          uintptr
+	BufferLength    int32
+	ActualLength    int32
+	StartFrame      int32
 	NumberOfPackets int32
-	ErrorCount    int32
-	SignR         uint32
-	UserContext   uintptr
+	ErrorCount      int32
+	SignR           uint32
+	UserContext     uintptr
 }
 
 // AllocateStreams allocates bulk streams (USB 3.0+)
@@ -236,7 +236,7 @@ func (h *DeviceHandle) GetStatus(recipient, index uint16) (uint16, error) {
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return uint16(buf[0]) | (uint16(buf[1]) << 8), nil
 }
 

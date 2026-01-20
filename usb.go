@@ -48,4 +48,3 @@ const (
 	EndpointDirectionOut EndpointDirection = 0
 	EndpointDirectionIn  EndpointDirection = 0x80
 )
-

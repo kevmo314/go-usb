@@ -23,11 +23,11 @@ package usb
 // Debug function to list all USB-related services
 void DebugListUSBServices() {
     printf("Listing USB services in IORegistry:\n");
-    
+
     // Try different service classes
     const char* classes[] = {
         "IOUSBHostDevice",
-        "IOUSBDevice", 
+        "IOUSBDevice",
         "IOUSBHostInterface",
         "IOUSBInterface",
         "AppleUSBHostController",
@@ -37,14 +37,14 @@ void DebugListUSBServices() {
         "AppleUSBUHCI",
         NULL
     };
-    
+
     for (int i = 0; classes[i] != NULL; i++) {
         CFMutableDictionaryRef matchingDict = IOServiceMatching(classes[i]);
         if (!matchingDict) continue;
-        
+
         io_iterator_t iterator = 0;
         kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault, matchingDict, &iterator);
-        
+
         if (kr == KERN_SUCCESS && iterator != 0) {
             io_object_t service;
             int count = 0;
@@ -64,7 +64,7 @@ void DebugListUSBServices() {
 io_iterator_t CreateUSBIteratorAlternative() {
     io_iterator_t iterator = 0;
     kern_return_t kr;
-    
+
     // Method 1: Try IOUSBHostDevice (modern macOS)
     CFMutableDictionaryRef matchingDict = IOServiceMatching("IOUSBHostDevice");
     if (matchingDict) {
@@ -80,7 +80,7 @@ io_iterator_t CreateUSBIteratorAlternative() {
             iterator = 0;
         }
     }
-    
+
     // Method 2: Try IOUSBDevice (legacy)
     matchingDict = IOServiceMatching("IOUSBDevice");
     if (matchingDict) {
@@ -96,7 +96,7 @@ io_iterator_t CreateUSBIteratorAlternative() {
             iterator = 0;
         }
     }
-    
+
     // Method 3: Walk the IORegistry tree from USB plane root
     io_registry_entry_t usbPlane = IORegistryGetRootEntry(kIOMainPortDefault);
     if (usbPlane != 0) {
@@ -109,7 +109,7 @@ io_iterator_t CreateUSBIteratorAlternative() {
             return iterator;
         }
     }
-    
+
     return 0;
 }
 
@@ -127,11 +127,11 @@ int GetIntPropertyDebug(io_service_t service, const char* key) {
     CFStringRef keyRef = CFStringCreateWithCString(kCFAllocatorDefault, key, kCFStringEncodingUTF8);
     CFNumberRef valueRef = (CFNumberRef)IORegistryEntryCreateCFProperty(service, keyRef, kCFAllocatorDefault, 0);
     CFRelease(keyRef);
-    
+
     if (valueRef == NULL) {
         return -1;
     }
-    
+
     int value = 0;
     CFNumberGetValue(valueRef, kCFNumberIntType, &value);
     CFRelease(valueRef);
@@ -153,36 +153,36 @@ func DebugUSBServices() {
 // TryAlternativeEnumeration attempts alternative enumeration
 func TryAlternativeEnumeration() ([]*Device, error) {
 	fmt.Println("Trying alternative USB enumeration method...")
-	
+
 	iterator := C.CreateUSBIteratorAlternative()
 	if iterator == 0 {
 		return nil, fmt.Errorf("alternative enumeration failed to create iterator")
 	}
 	defer C.IOObjectRelease(iterator)
-	
+
 	var devices []*Device
-	
+
 	for {
 		service := C.IOIteratorNext(iterator)
 		if service == 0 {
 			break
 		}
 		defer C.IOObjectRelease(service)
-		
+
 		// Check if this is actually a USB device
 		if C.IsUSBDevice(service) == 0 {
 			continue
 		}
-		
+
 		// Get basic properties
 		vendorID := C.GetIntPropertyDebug(service, C.CString("idVendor"))
 		productID := C.GetIntPropertyDebug(service, C.CString("idProduct"))
 		locationID := C.GetIntPropertyDebug(service, C.CString("locationID"))
-		
+
 		if vendorID >= 0 && productID >= 0 {
-			fmt.Printf("Found device: VID=%04x PID=%04x Location=%08x\n", 
+			fmt.Printf("Found device: VID=%04x PID=%04x Location=%08x\n",
 				vendorID, productID, locationID)
-			
+
 			// Create a basic device entry
 			dev := &Device{
 				Path:    fmt.Sprintf("iokit:%08x", locationID),
@@ -196,6 +196,6 @@ func TryAlternativeEnumeration() ([]*Device, error) {
 			devices = append(devices, dev)
 		}
 	}
-	
+
 	return devices, nil
 }

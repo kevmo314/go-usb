@@ -25,11 +25,11 @@ int GetIntProperty(io_service_t service, const char* key) {
     CFStringRef keyRef = CFStringCreateWithCString(kCFAllocatorDefault, key, kCFStringEncodingUTF8);
     CFNumberRef valueRef = (CFNumberRef)IORegistryEntryCreateCFProperty(service, keyRef, kCFAllocatorDefault, 0);
     CFRelease(keyRef);
-    
+
     if (valueRef == NULL) {
         return -1;
     }
-    
+
     int value = 0;
     CFNumberGetValue(valueRef, kCFNumberIntType, &value);
     CFRelease(valueRef);
@@ -41,19 +41,19 @@ char* GetStringProperty(io_service_t service, const char* key) {
     CFStringRef keyRef = CFStringCreateWithCString(kCFAllocatorDefault, key, kCFStringEncodingUTF8);
     CFStringRef valueRef = (CFStringRef)IORegistryEntryCreateCFProperty(service, keyRef, kCFAllocatorDefault, 0);
     CFRelease(keyRef);
-    
+
     if (valueRef == NULL) {
         return NULL;
     }
-    
+
     static char buffer[256];
     Boolean result = CFStringGetCString(valueRef, buffer, sizeof(buffer), kCFStringEncodingUTF8);
     CFRelease(valueRef);
-    
+
     if (!result) {
         return NULL;
     }
-    
+
     return buffer;
 }
 
@@ -61,11 +61,11 @@ char* GetStringProperty(io_service_t service, const char* key) {
 io_iterator_t CreateUSBIterator() {
     io_iterator_t iterator = 0;
     kern_return_t kr;
-    
+
     // Try to create a broad matching dictionary for all USB devices
     // Use IOServiceMatching with a more general approach
     CFMutableDictionaryRef matchingDict = NULL;
-    
+
     // First, try to get ALL services and filter manually
     // This is less efficient but more likely to find devices
     matchingDict = IOServiceMatching("IOUSBHostDevice");
@@ -75,7 +75,7 @@ io_iterator_t CreateUSBIterator() {
     if (matchingDict == NULL) {
         matchingDict = IOServiceMatching(kIOUSBDeviceClassName);
     }
-    
+
     if (matchingDict != NULL) {
         kr = IOServiceGetMatchingServices(kIOMainPortDefault, matchingDict, &iterator);
         if (kr == KERN_SUCCESS && iterator != 0) {
@@ -90,7 +90,7 @@ io_iterator_t CreateUSBIterator() {
             IOObjectRelease(iterator);
         }
     }
-    
+
     // If that failed, try a different approach - look for USB controllers
     matchingDict = IOServiceMatching("AppleUSBXHCI");
     if (matchingDict != NULL) {
@@ -112,7 +112,7 @@ io_iterator_t CreateUSBIterator() {
             IOObjectRelease(controllerIter);
         }
     }
-    
+
     return 0;
 }
 
@@ -171,55 +171,55 @@ func (e *IOKitEnumerator) EnumerateDevices() ([]*Device, error) {
 	defer C.ReleaseIterator(iterator)
 
 	var devices []*Device
-	
+
 	// Check if iterator is valid but empty
 	firstDevice := C.GetNextUSBDevice(iterator)
 	if firstDevice == 0 {
 		// No USB devices found - common on systems with no USB devices
 		return devices, nil
 	}
-	
+
 	// Process all devices
 	// Use a helper function to handle defer properly in loop
 	processDevice := func(device C.io_service_t) {
 		defer C.ReleaseService(device)
-		
+
 		// Get device properties
 		vendorID := C.GetIntProperty(device, C.CString("idVendor"))
 		productID := C.GetIntProperty(device, C.CString("idProduct"))
 		locationID := C.GetIntProperty(device, C.CString("locationID"))
-		
+
 		if vendorID < 0 || productID < 0 {
 			return
 		}
-		
+
 		// Get device interface to retrieve descriptor
 		devInterface, err := GetUSBDeviceInterface(device)
 		if err != nil {
 			return
 		}
 		defer devInterface.Release()
-		
+
 		// Get device descriptor
 		descriptor, err := devInterface.GetDeviceDescriptor()
 		if err != nil {
 			return
 		}
-		
+
 		// Extract bus and address from location ID
 		// Location ID format: 0xBBDDPPPP where BB = bus, DD = depth, PPPP = port
 		bus := uint8((locationID >> 24) & 0xFF)
 		address := uint8(len(devices) + 1) // Simple incrementing address
-		
+
 		// Get string properties if available
 		manufacturer := C.GoString(C.GetStringProperty(device, C.CString("USB Vendor Name")))
 		product := C.GoString(C.GetStringProperty(device, C.CString("USB Product Name")))
 		serial := C.GoString(C.GetStringProperty(device, C.CString("USB Serial Number")))
-		
+
 		usbDev := &Device{
-			Path:    fmt.Sprintf("iokit:%08x", locationID),
-			Bus:     bus,
-			Address: address,
+			Path:       fmt.Sprintf("iokit:%08x", locationID),
+			Bus:        bus,
+			Address:    address,
 			Descriptor: *descriptor,
 			IOKitDevice: &IOKitDevice{
 				Service:    0, // Don't store service as we're releasing it
@@ -235,18 +235,18 @@ func (e *IOKitEnumerator) EnumerateDevices() ([]*Device, error) {
 				Serial:       serial,
 			},
 		}
-		
+
 		devices = append(devices, usbDev)
 	}
-	
+
 	// Process first device
 	processDevice(firstDevice)
-	
+
 	// Process remaining devices
 	for usbDevice := C.GetNextUSBDevice(iterator); usbDevice != 0; usbDevice = C.GetNextUSBDevice(iterator) {
 		processDevice(usbDevice)
 	}
-	
+
 	return devices, nil
 }
 
@@ -267,8 +267,36 @@ type CachedStrings struct {
 	Serial       string
 }
 
-// DeviceList returns a list of USB devices on macOS
-func DeviceList() ([]*Device, error) {
+// DeviceListOption is a functional option for configuring DeviceList behavior.
+type DeviceListOption func(*deviceListOptions)
+
+// deviceListOptions holds the configuration for DeviceList.
+type deviceListOptions struct {
+	includeInaccessible bool
+}
+
+// WithInaccessibleDevices returns an option that includes devices that cannot
+// be opened. On macOS, all devices are typically accessible via IOKit, so this
+// option has no effect but is provided for API compatibility with Windows.
+func WithInaccessibleDevices() DeviceListOption {
+	return func(o *deviceListOptions) {
+		o.includeInaccessible = true
+	}
+}
+
+// DeviceList returns a list of USB devices on macOS.
+//
+// The opts parameter accepts functional options for API compatibility with
+// other platforms. On macOS, options like WithInaccessibleDevices() have no
+// effect since all devices are accessible via IOKit.
+func DeviceList(opts ...DeviceListOption) ([]*Device, error) {
+	// Apply options (for API compatibility, though they have no effect on macOS)
+	options := &deviceListOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+	_ = options // unused on macOS
+
 	enumerator := NewIOKitEnumerator()
 	return enumerator.EnumerateDevices()
 }
@@ -281,14 +309,14 @@ func (d *Device) Open() (*DeviceHandle, error) {
 		return nil, fmt.Errorf("failed to create USB device iterator")
 	}
 	defer C.ReleaseIterator(iterator)
-	
+
 	var usbDevice C.io_service_t
 	for {
 		device := C.GetNextUSBDevice(iterator)
 		if device == 0 {
 			break
 		}
-		
+
 		locationID := C.GetIntProperty(device, C.CString("locationID"))
 		if uint32(locationID) == d.IOKitDevice.LocationID {
 			usbDevice = device
@@ -296,18 +324,18 @@ func (d *Device) Open() (*DeviceHandle, error) {
 		}
 		C.ReleaseService(device)
 	}
-	
+
 	if usbDevice == 0 {
 		return nil, ErrDeviceNotFound
 	}
-	
+
 	// Get device interface
 	devInterface, err := GetUSBDeviceInterface(usbDevice)
 	if err != nil {
 		C.ReleaseService(usbDevice)
 		return nil, err
 	}
-	
+
 	// Open the device
 	err = devInterface.Open()
 	if err != nil {
@@ -315,12 +343,12 @@ func (d *Device) Open() (*DeviceHandle, error) {
 		C.ReleaseService(usbDevice)
 		return nil, err
 	}
-	
+
 	return &DeviceHandle{
-		device:       d,
-		devInterface: devInterface,
-		service:      usbDevice,
-		interfaces:   make(map[uint8]*IOUSBInterfaceInterface),
+		device:        d,
+		devInterface:  devInterface,
+		service:       usbDevice,
+		interfaces:    make(map[uint8]*IOUSBInterfaceInterface),
 		claimedIfaces: make(map[uint8]bool),
 	}, nil
 }
@@ -331,13 +359,13 @@ func OpenDevice(vendorID, productID uint16) (*DeviceHandle, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	for _, dev := range devices {
 		if dev.Descriptor.VendorID == vendorID && dev.Descriptor.ProductID == productID {
 			return dev.Open()
 		}
 	}
-	
+
 	return nil, ErrDeviceNotFound
 }
 
@@ -347,13 +375,13 @@ func OpenDeviceWithPath(path string) (*DeviceHandle, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	for _, dev := range devices {
 		if dev.Path == path {
 			return dev.Open()
 		}
 	}
-	
+
 	return nil, ErrDeviceNotFound
 }
 
@@ -363,7 +391,7 @@ func IsValidDevicePath(path string) bool {
 	if !strings.HasPrefix(path, "iokit:") {
 		return false
 	}
-	
+
 	// Extract location ID from path
 	locationStr := strings.TrimPrefix(path, "iokit:")
 	_, err := strconv.ParseUint(locationStr, 16, 32)

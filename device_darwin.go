@@ -1,7 +1,7 @@
 package usb
 
 /*
-#cgo LDFLAGS: -framework IOKit -framework CoreFoundation  
+#cgo LDFLAGS: -framework IOKit -framework CoreFoundation
 #include <IOKit/IOKitLib.h>
 #include <IOKit/usb/IOUSBLib.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -33,36 +33,36 @@ type DeviceHandle struct {
 func (h *DeviceHandle) Close() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	if h.closed {
 		return nil
 	}
-	
+
 	// Remove async source from run loop if present
 	if h.asyncSource != 0 {
 		C.CFRunLoopRemoveSource(C.CFRunLoopGetCurrent(), h.asyncSource, C.kCFRunLoopDefaultMode)
 		C.CFRelease(C.CFTypeRef(h.asyncSource))
 		h.asyncSource = 0
 	}
-	
+
 	// Release all claimed interfaces
 	for iface := range h.claimedIfaces {
 		h.releaseInterfaceInternal(iface)
 	}
-	
+
 	// Close device
 	if h.devInterface != nil {
 		h.devInterface.Close()
 		h.devInterface.Release()
 		h.devInterface = nil
 	}
-	
+
 	// Release service
 	if h.service != 0 {
 		C.ReleaseService(h.service)
 		h.service = 0
 	}
-	
+
 	h.closed = true
 	return nil
 }
@@ -71,11 +71,11 @@ func (h *DeviceHandle) Close() error {
 func (h *DeviceHandle) SetConfiguration(config int) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	if h.closed {
 		return fmt.Errorf("device is closed")
 	}
-	
+
 	return h.devInterface.SetConfiguration(uint8(config))
 }
 
@@ -83,11 +83,11 @@ func (h *DeviceHandle) SetConfiguration(config int) error {
 func (h *DeviceHandle) GetConfiguration() (int, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	if h.closed {
 		return 0, fmt.Errorf("device is closed")
 	}
-	
+
 	config, err := h.devInterface.GetConfiguration()
 	return int(config), err
 }
@@ -96,19 +96,19 @@ func (h *DeviceHandle) GetConfiguration() (int, error) {
 func (h *DeviceHandle) ClaimInterface(iface uint8) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	if h.closed {
 		return fmt.Errorf("device is closed")
 	}
-	
+
 	if h.claimedIfaces[iface] {
 		return nil // Already claimed
 	}
-	
+
 	// Find and open the interface
 	// Note: This is a simplified implementation
 	// A full implementation would iterate through interfaces properly
-	
+
 	h.claimedIfaces[iface] = true
 	return nil
 }
@@ -117,11 +117,11 @@ func (h *DeviceHandle) ClaimInterface(iface uint8) error {
 func (h *DeviceHandle) ReleaseInterface(iface uint8) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	if h.closed {
 		return fmt.Errorf("device is closed")
 	}
-	
+
 	return h.releaseInterfaceInternal(iface)
 }
 
@@ -129,14 +129,14 @@ func (h *DeviceHandle) releaseInterfaceInternal(iface uint8) error {
 	if !h.claimedIfaces[iface] {
 		return nil // Not claimed
 	}
-	
+
 	// Close interface if it's open
 	if intf, ok := h.interfaces[iface]; ok {
 		intf.Close()
 		intf.Release()
 		delete(h.interfaces, iface)
 	}
-	
+
 	delete(h.claimedIfaces, iface)
 	return nil
 }
@@ -145,20 +145,20 @@ func (h *DeviceHandle) releaseInterfaceInternal(iface uint8) error {
 func (h *DeviceHandle) SetAltSetting(iface, altSetting uint8) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	if h.closed {
 		return fmt.Errorf("device is closed")
 	}
-	
+
 	if !h.claimedIfaces[iface] {
 		return fmt.Errorf("interface %d not claimed", iface)
 	}
-	
+
 	intf, ok := h.interfaces[iface]
 	if !ok {
 		return fmt.Errorf("interface %d not open", iface)
 	}
-	
+
 	return intf.SetAlternateSetting(altSetting)
 }
 
@@ -166,11 +166,11 @@ func (h *DeviceHandle) SetAltSetting(iface, altSetting uint8) error {
 func (h *DeviceHandle) ClearHalt(endpoint uint8) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	if h.closed {
 		return fmt.Errorf("device is closed")
 	}
-	
+
 	// Determine interface from endpoint
 	// This is simplified - a full implementation would track endpoint-to-interface mapping
 	for _, intf := range h.interfaces {
@@ -181,7 +181,7 @@ func (h *DeviceHandle) ClearHalt(endpoint uint8) error {
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("endpoint %02x not found", endpoint)
 }
 
@@ -189,11 +189,11 @@ func (h *DeviceHandle) ClearHalt(endpoint uint8) error {
 func (h *DeviceHandle) ResetDevice() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	if h.closed {
 		return fmt.Errorf("device is closed")
 	}
-	
+
 	return h.devInterface.ResetDevice()
 }
 
@@ -222,19 +222,19 @@ func (h *DeviceHandle) AttachKernelDriver(iface uint8) error {
 func (h *DeviceHandle) StringDescriptor(index uint8) (string, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	if h.closed {
 		return "", fmt.Errorf("device is closed")
 	}
-	
+
 	// First get language ID (index 0)
 	langID := uint16(0x0409) // Default to US English
 	if index == 0 {
 		// Get supported languages
 		buf := make([]byte, 256)
 		_, err := h.devInterface.ControlTransfer(
-			0x80, // Device-to-host, standard, device
-			0x06, // GET_DESCRIPTOR
+			0x80,   // Device-to-host, standard, device
+			0x06,   // GET_DESCRIPTOR
 			0x0300, // String descriptor, index 0
 			0,
 			buf,
@@ -243,12 +243,12 @@ func (h *DeviceHandle) StringDescriptor(index uint8) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		
+
 		if len(buf) >= 4 {
 			langID = binary.LittleEndian.Uint16(buf[2:4])
 		}
 	}
-	
+
 	// Check cached strings first
 	if h.device.CachedStrings != nil {
 		switch index {
@@ -266,7 +266,7 @@ func (h *DeviceHandle) StringDescriptor(index uint8) (string, error) {
 			}
 		}
 	}
-	
+
 	// Get the actual string descriptor
 	return h.devInterface.GetStringDescriptor(index, langID)
 }
@@ -275,11 +275,11 @@ func (h *DeviceHandle) StringDescriptor(index uint8) (string, error) {
 func (h *DeviceHandle) GetDeviceDescriptor() (*DeviceDescriptor, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	if h.closed {
 		return nil, fmt.Errorf("device is closed")
 	}
-	
+
 	return h.devInterface.GetDeviceDescriptor()
 }
 
@@ -287,22 +287,22 @@ func (h *DeviceHandle) GetDeviceDescriptor() (*DeviceDescriptor, error) {
 func (h *DeviceHandle) GetActiveConfigDescriptor() (*ConfigDescriptor, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	if h.closed {
 		return nil, fmt.Errorf("device is closed")
 	}
-	
+
 	// Get current configuration
 	config, err := h.GetConfiguration()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Configuration values start at 1, but index starts at 0
 	if config > 0 {
 		return h.GetConfigDescriptor(uint8(config - 1))
 	}
-	
+
 	return h.GetConfigDescriptor(0)
 }
 
@@ -310,17 +310,17 @@ func (h *DeviceHandle) GetActiveConfigDescriptor() (*ConfigDescriptor, error) {
 func (h *DeviceHandle) GetConfigDescriptor(index uint8) (*ConfigDescriptor, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	if h.closed {
 		return nil, fmt.Errorf("device is closed")
 	}
-	
+
 	// First get the configuration descriptor header
 	buf := make([]byte, 9)
 	_, err := h.devInterface.ControlTransfer(
-		0x80,                    // Device-to-host, standard, device
-		USB_REQ_GET_DESCRIPTOR,  // GET_DESCRIPTOR
-		(USB_DT_CONFIG << 8) | uint16(index), // Config descriptor
+		0x80,                             // Device-to-host, standard, device
+		USB_REQ_GET_DESCRIPTOR,           // GET_DESCRIPTOR
+		(USB_DT_CONFIG<<8)|uint16(index), // Config descriptor
 		0,
 		buf,
 		5000,
@@ -328,16 +328,16 @@ func (h *DeviceHandle) GetConfigDescriptor(index uint8) (*ConfigDescriptor, erro
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Parse total length
 	totalLength := binary.LittleEndian.Uint16(buf[2:4])
-	
+
 	// Get full descriptor
 	fullBuf := make([]byte, totalLength)
 	_, err = h.devInterface.ControlTransfer(
 		0x80,
 		USB_REQ_GET_DESCRIPTOR,
-		(USB_DT_CONFIG << 8) | uint16(index),
+		(USB_DT_CONFIG<<8)|uint16(index),
 		0,
 		fullBuf,
 		5000,
@@ -345,7 +345,7 @@ func (h *DeviceHandle) GetConfigDescriptor(index uint8) (*ConfigDescriptor, erro
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Parse the configuration descriptor
 	return parseConfigDescriptor(fullBuf)
 }
@@ -361,7 +361,7 @@ func parseConfigDescriptor(data []byte) (*ConfigDescriptor, error) {
 	if len(data) < 9 {
 		return nil, fmt.Errorf("config descriptor too short")
 	}
-	
+
 	config := &ConfigDescriptor{
 		Length:             data[0],
 		DescriptorType:     data[1],
@@ -373,24 +373,24 @@ func parseConfigDescriptor(data []byte) (*ConfigDescriptor, error) {
 		MaxPower:           data[8],
 		Interfaces:         make([]Interface, 0),
 	}
-	
+
 	// Map to track interfaces by number
 	interfaceMap := make(map[uint8]*Interface)
-	
+
 	// Parse interfaces
 	offset := 9
 	for offset < len(data) {
 		if offset+1 >= len(data) {
 			break
 		}
-		
+
 		length := int(data[offset])
 		descType := data[offset+1]
-		
+
 		if length == 0 || offset+length > len(data) {
 			break
 		}
-		
+
 		if descType == USB_DT_INTERFACE && length >= 9 {
 			altSetting := InterfaceAltSetting{
 				Length:            data[offset],
@@ -404,7 +404,7 @@ func parseConfigDescriptor(data []byte) (*ConfigDescriptor, error) {
 				InterfaceIndex:    data[offset+8],
 				Endpoints:         make([]Endpoint, 0),
 			}
-			
+
 			// Get or create interface
 			intfNum := altSetting.InterfaceNumber
 			if _, exists := interfaceMap[intfNum]; !exists {
@@ -414,17 +414,17 @@ func parseConfigDescriptor(data []byte) (*ConfigDescriptor, error) {
 			}
 			interfaceMap[intfNum].AltSettings = append(interfaceMap[intfNum].AltSettings, altSetting)
 		}
-		
+
 		offset += length
 	}
-	
+
 	// Convert map to sorted slice
 	for i := uint8(0); i < config.NumInterfaces; i++ {
 		if intf, exists := interfaceMap[i]; exists {
 			config.Interfaces = append(config.Interfaces, *intf)
 		}
 	}
-	
+
 	return config, nil
 }
 
@@ -434,11 +434,11 @@ func parseConfigDescriptor(data []byte) (*ConfigDescriptor, error) {
 func (h *DeviceHandle) GetBOSDescriptor() (*BOSDescriptor, []DeviceCapabilityDescriptor, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	if h.closed {
 		return nil, nil, fmt.Errorf("device is closed")
 	}
-	
+
 	// First get BOS descriptor header
 	buf := make([]byte, 5)
 	_, err := h.devInterface.ControlTransfer(
@@ -452,14 +452,14 @@ func (h *DeviceHandle) GetBOSDescriptor() (*BOSDescriptor, []DeviceCapabilityDes
 	if err != nil {
 		return nil, nil, err
 	}
-	
+
 	bos := &BOSDescriptor{
 		Length:         buf[0],
 		DescriptorType: buf[1],
 		TotalLength:    binary.LittleEndian.Uint16(buf[2:4]),
 		NumDeviceCaps:  buf[4],
 	}
-	
+
 	// Get full BOS descriptor with capabilities
 	fullBuf := make([]byte, bos.TotalLength)
 	_, err = h.devInterface.ControlTransfer(
@@ -473,7 +473,7 @@ func (h *DeviceHandle) GetBOSDescriptor() (*BOSDescriptor, []DeviceCapabilityDes
 	if err != nil {
 		return nil, nil, err
 	}
-	
+
 	// Parse device capabilities
 	var caps []DeviceCapabilityDescriptor
 	offset := 5
@@ -481,22 +481,22 @@ func (h *DeviceHandle) GetBOSDescriptor() (*BOSDescriptor, []DeviceCapabilityDes
 		if offset+2 >= len(fullBuf) {
 			break
 		}
-		
+
 		length := int(fullBuf[offset])
 		if offset+length > len(fullBuf) {
 			break
 		}
-		
+
 		cap := DeviceCapabilityDescriptor{
 			Length:            fullBuf[offset],
 			DescriptorType:    fullBuf[offset+1],
 			DevCapabilityType: fullBuf[offset+2],
 		}
 		caps = append(caps, cap)
-		
+
 		offset += length
 	}
-	
+
 	return bos, caps, nil
 }
 
@@ -504,11 +504,11 @@ func (h *DeviceHandle) GetBOSDescriptor() (*BOSDescriptor, []DeviceCapabilityDes
 func (h *DeviceHandle) GetDeviceQualifierDescriptor() (*DeviceQualifierDescriptor, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	if h.closed {
 		return nil, fmt.Errorf("device is closed")
 	}
-	
+
 	buf := make([]byte, 10)
 	_, err := h.devInterface.ControlTransfer(
 		0x80,
@@ -521,7 +521,7 @@ func (h *DeviceHandle) GetDeviceQualifierDescriptor() (*DeviceQualifierDescripto
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &DeviceQualifierDescriptor{
 		Length:            buf[0],
 		DescriptorType:    buf[1],

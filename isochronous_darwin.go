@@ -86,14 +86,14 @@ type IsochronousTransfer struct {
 func NewIsochronousTransfer(handle *DeviceHandle, endpoint uint8, numPackets int, packetSize int) *IsochronousTransfer {
 	totalSize := numPackets * packetSize
 	frameList := make([]C.IOUSBIsocFrame, numPackets)
-	
+
 	// Initialize frame list
 	for i := range frameList {
 		frameList[i].frStatus = C.kIOReturnSuccess
 		frameList[i].frReqCount = C.UInt16(packetSize)
 		frameList[i].frActCount = 0
 	}
-	
+
 	return &IsochronousTransfer{
 		handle:         handle,
 		endpoint:       endpoint,
@@ -127,7 +127,7 @@ func (t *IsochronousTransfer) SetPacketLength(packet int, length int) error {
 	if packet < 0 || packet >= t.numPackets {
 		return fmt.Errorf("packet index %d out of range", packet)
 	}
-	
+
 	t.frameList[packet].frReqCount = C.UInt16(length)
 	t.packetLengths[packet] = length
 	return nil
@@ -138,18 +138,18 @@ func (t *IsochronousTransfer) GetPacketData(packet int) ([]byte, error) {
 	if packet < 0 || packet >= t.numPackets {
 		return nil, fmt.Errorf("packet index %d out of range", packet)
 	}
-	
+
 	offset := packet * t.packetSize
 	length := t.packetLengths[packet]
 	if length == 0 {
 		length = t.packetSize
 	}
-	
+
 	end := offset + length
 	if end > len(t.buffer) {
 		end = len(t.buffer)
 	}
-	
+
 	return t.buffer[offset:end], nil
 }
 
@@ -157,26 +157,26 @@ func (t *IsochronousTransfer) GetPacketData(packet int) ([]byte, error) {
 func (t *IsochronousTransfer) Submit() error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	
+
 	if t.submitted {
 		return fmt.Errorf("transfer already submitted")
 	}
-	
+
 	if t.handle.closed {
 		return fmt.Errorf("device is closed")
 	}
-	
+
 	// Find the interface for this endpoint
 	var intf *IOUSBInterfaceInterface
 	for _, i := range t.handle.interfaces {
 		intf = i
 		break
 	}
-	
+
 	if intf == nil {
 		return fmt.Errorf("no interface claimed for endpoint %02x", t.endpoint)
 	}
-	
+
 	// Get current bus frame number
 	var frameNumber C.UInt64
 	var atTime C.AbsoluteTime
@@ -184,12 +184,12 @@ func (t *IsochronousTransfer) Submit() error {
 	if ret != kIOReturnSuccess {
 		return fmt.Errorf("failed to get bus frame number: 0x%x", ret)
 	}
-	
+
 	// Start a few frames in the future
 	startFrame := frameNumber + 10
-	
+
 	pipeRef := t.endpoint & 0x0F
-	
+
 	// Submit the isochronous transfer
 	if t.endpoint&0x80 != 0 {
 		// IN transfer
@@ -208,16 +208,16 @@ func (t *IsochronousTransfer) Submit() error {
 			C.UInt32(t.numPackets),
 			&t.frameList[0])
 	}
-	
+
 	if ret != kIOReturnSuccess {
 		return fmt.Errorf("isochronous transfer failed: 0x%x", ret)
 	}
-	
+
 	t.submitted = true
-	
+
 	// Since we're using sync API for now, mark as completed
 	t.processCompletion()
-	
+
 	return nil
 }
 
@@ -225,27 +225,27 @@ func (t *IsochronousTransfer) Submit() error {
 func (t *IsochronousTransfer) processCompletion() {
 	t.actualLength = 0
 	allSuccess := true
-	
+
 	// Process frame results
 	for i, frame := range t.frameList {
 		t.packetStatuses[i] = int(frame.frStatus)
 		actualCount := int(frame.frActCount)
 		t.packetLengths[i] = actualCount
 		t.actualLength += actualCount
-		
+
 		if frame.frStatus != C.kIOReturnSuccess {
 			allSuccess = false
 		}
 	}
-	
+
 	if allSuccess {
 		t.status = TransferCompleted
 	} else {
 		t.status = TransferError
 	}
-	
+
 	t.completed = true
-	
+
 	if t.callback != nil {
 		t.callback(t)
 	}
@@ -255,19 +255,19 @@ func (t *IsochronousTransfer) processCompletion() {
 func (t *IsochronousTransfer) Cancel() error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	
+
 	if !t.submitted {
 		return fmt.Errorf("transfer not submitted")
 	}
-	
+
 	if t.completed {
 		return nil
 	}
-	
+
 	// Cancellation would require async API support
 	t.status = TransferCancelled
 	t.completed = true
-	
+
 	return nil
 }
 
@@ -276,11 +276,11 @@ func (t *IsochronousTransfer) Wait() error {
 	// Since we're using sync API, transfer is already complete
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	
+
 	if !t.submitted {
 		return fmt.Errorf("transfer not submitted")
 	}
-	
+
 	return nil
 }
 

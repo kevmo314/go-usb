@@ -35,7 +35,6 @@ const (
 	USBDEVFS_GET_SPEED        = 0x8004551f
 )
 
-
 type Device struct {
 	Path         string
 	Bus          uint8

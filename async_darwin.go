@@ -51,26 +51,26 @@ func NewAsyncTransfer(handle *DeviceHandle, endpoint uint8, transferType Transfe
 func (t *AsyncTransfer) Submit() error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	
+
 	if t.submitted {
 		return fmt.Errorf("transfer already submitted")
 	}
-	
+
 	if t.handle.closed {
 		return fmt.Errorf("device is closed")
 	}
-	
+
 	// Find the interface for this endpoint
 	var intf *IOUSBInterfaceInterface
 	for _, i := range t.handle.interfaces {
 		intf = i
 		break
 	}
-	
+
 	if intf == nil {
 		return fmt.Errorf("no interface claimed for endpoint %02x", t.endpoint)
 	}
-	
+
 	// Create async event source if needed
 	if t.handle.asyncSource == 0 {
 		source, err := intf.CreateAsyncEventSource()
@@ -80,12 +80,12 @@ func (t *AsyncTransfer) Submit() error {
 		t.handle.asyncSource = source
 		C.AddSourceToRunLoop(source)
 	}
-	
+
 	// Submit the async transfer
 	callback := func(result int32, bytesTransferred uint32) {
 		t.mutex.Lock()
 		defer t.mutex.Unlock()
-		
+
 		t.actualLength = int(bytesTransferred)
 		if result == kIOReturnSuccess {
 			t.status = TransferCompleted
@@ -95,15 +95,15 @@ func (t *AsyncTransfer) Submit() error {
 			t.status = TransferError
 		}
 		t.completed = true
-		
+
 		if t.callback != nil {
 			t.callback(t.Transfer)
 		}
 	}
-	
+
 	var err error
 	pipeRef := t.endpoint & 0x0F
-	
+
 	if t.endpoint&0x80 != 0 {
 		// IN transfer
 		err = intf.BulkTransferInAsync(pipeRef, t.buffer, callback)
@@ -111,11 +111,11 @@ func (t *AsyncTransfer) Submit() error {
 		// OUT transfer
 		err = intf.BulkTransferOutAsync(pipeRef, t.buffer, callback)
 	}
-	
+
 	if err != nil {
 		return err
 	}
-	
+
 	t.submitted = true
 	return nil
 }
@@ -123,7 +123,7 @@ func (t *AsyncTransfer) Submit() error {
 // Wait waits for the transfer to complete
 func (t *AsyncTransfer) Wait(timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	
+
 	for {
 		t.mutex.Lock()
 		if t.completed {
@@ -131,11 +131,11 @@ func (t *AsyncTransfer) Wait(timeout time.Duration) error {
 			return nil
 		}
 		t.mutex.Unlock()
-		
+
 		if time.Now().After(deadline) {
 			return ErrTimeout
 		}
-		
+
 		time.Sleep(10 * time.Millisecond)
 	}
 }
@@ -144,19 +144,19 @@ func (t *AsyncTransfer) Wait(timeout time.Duration) error {
 func (t *AsyncTransfer) Cancel() error {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	
+
 	if !t.submitted {
 		return fmt.Errorf("transfer not submitted")
 	}
-	
+
 	if t.completed {
 		return nil
 	}
-	
+
 	// Note: Proper cancellation would require IOKit async API support
 	t.status = TransferCancelled
 	t.completed = true
-	
+
 	return nil
 }
 
@@ -172,7 +172,7 @@ func (h *DeviceHandle) AsyncBulkTransfer(endpoint uint8, data []byte, callback f
 	transfer := NewAsyncTransfer(h, endpoint, TransferTypeBulk, len(data))
 	copy(transfer.buffer, data)
 	transfer.SetCallback(callback)
-	
+
 	return transfer.Submit()
 }
 
@@ -181,7 +181,7 @@ func (h *DeviceHandle) AsyncInterruptTransfer(endpoint uint8, data []byte, callb
 	transfer := NewAsyncTransfer(h, endpoint, TransferTypeInterrupt, len(data))
 	copy(transfer.buffer, data)
 	transfer.SetCallback(callback)
-	
+
 	return transfer.Submit()
 }
 
@@ -192,7 +192,7 @@ func HandleEvents(timeout time.Duration) error {
 	if seconds <= 0 {
 		seconds = 0.001 // Minimum timeout
 	}
-	
+
 	C.RunLoopRunWithTimeout(C.double(seconds))
 	return nil
 }

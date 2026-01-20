@@ -6,9 +6,36 @@ import (
 
 // Compatibility methods for Linux to match cross-platform API
 
+// DeviceListOption is a functional option for configuring DeviceList behavior.
+type DeviceListOption func(*deviceListOptions)
+
+// deviceListOptions holds the configuration for DeviceList.
+type deviceListOptions struct {
+	includeInaccessible bool
+}
+
+// WithInaccessibleDevices returns an option that includes devices that cannot
+// be opened. On Linux, all devices are typically accessible via sysfs, so this
+// option has no effect but is provided for API compatibility with Windows.
+func WithInaccessibleDevices() DeviceListOption {
+	return func(o *deviceListOptions) {
+		o.includeInaccessible = true
+	}
+}
+
 // DeviceList returns a list of all USB devices on the system.
 // This uses sysfs enumeration on Linux.
-func DeviceList() ([]*Device, error) {
+//
+// The opts parameter accepts functional options for API compatibility with
+// other platforms. On Linux, options like WithInaccessibleDevices() have no
+// effect since all devices are accessible via sysfs.
+func DeviceList(opts ...DeviceListOption) ([]*Device, error) {
+	// Apply options (for API compatibility, though they have no effect on Linux)
+	options := &deviceListOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	enum := NewSysfsEnumerator()
 	sysfsDevices, err := enum.EnumerateDevices()
 	if err != nil {
@@ -77,11 +104,11 @@ func (h *DeviceHandle) GetActiveConfigDescriptor() (*ConfigDescriptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if config > 0 {
 		return h.ConfigDescriptorByValue(uint8(config))
 	}
-	
+
 	return h.ConfigDescriptorByValue(1)
 }
 

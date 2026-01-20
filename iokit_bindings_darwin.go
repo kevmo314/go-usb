@@ -16,57 +16,57 @@ IOUSBDeviceInterface320** GetUSBDeviceInterface(io_service_t usbDevice) {
     IOUSBDeviceInterface320 **deviceInterface = NULL;
     SInt32 score;
     kern_return_t kr;
-    
+
     kr = IOCreatePlugInInterfaceForService(usbDevice,
                                           kIOUSBDeviceUserClientTypeID,
                                           kIOCFPlugInInterfaceID,
                                           &plugInInterface,
                                           &score);
-    
+
     if (kr != 0 || !plugInInterface) {
         return NULL;
     }
-    
+
     HRESULT result = (*plugInInterface)->QueryInterface(plugInInterface,
                                                        CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID320),
                                                        (LPVOID *)&deviceInterface);
-    
+
     (*plugInInterface)->Release(plugInInterface);
-    
+
     if (result || !deviceInterface) {
         return NULL;
     }
-    
+
     return deviceInterface;
 }
 
-// Helper function to get USB interface interface  
+// Helper function to get USB interface interface
 IOUSBInterfaceInterface300** GetUSBInterfaceInterface(io_service_t usbInterface) {
     IOCFPlugInInterface **plugInInterface = NULL;
     IOUSBInterfaceInterface300 **interfaceInterface = NULL;
     SInt32 score;
     kern_return_t kr;
-    
+
     kr = IOCreatePlugInInterfaceForService(usbInterface,
                                           kIOUSBInterfaceUserClientTypeID,
                                           kIOCFPlugInInterfaceID,
                                           &plugInInterface,
                                           &score);
-    
+
     if (kr != 0 || !plugInInterface) {
         return NULL;
     }
-    
+
     HRESULT result = (*plugInInterface)->QueryInterface(plugInInterface,
                                                        CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID300),
                                                        (LPVOID *)&interfaceInterface);
-    
+
     (*plugInInterface)->Release(plugInInterface);
-    
+
     if (result || !interfaceInterface) {
         return NULL;
     }
-    
+
     return interfaceInterface;
 }
 
@@ -100,7 +100,7 @@ int GetDeviceDescriptor(IOUSBDeviceInterface320 **deviceInterface, IOUSBDeviceDe
     request.wIndex = 0;
     request.wLength = sizeof(IOUSBDeviceDescriptor);
     request.pData = desc;
-    
+
     return (*deviceInterface)->DeviceRequest(deviceInterface, &request);
 }
 
@@ -125,9 +125,9 @@ int GetConfiguration(IOUSBDeviceInterface320 **deviceInterface, UInt8 *config) {
 }
 
 // Control transfer helper
-int ControlTransfer(IOUSBDeviceInterface320 **deviceInterface, 
+int ControlTransfer(IOUSBDeviceInterface320 **deviceInterface,
                    UInt8 bmRequestType,
-                   UInt8 bRequest, 
+                   UInt8 bRequest,
                    UInt16 wValue,
                    UInt16 wIndex,
                    void *data,
@@ -142,7 +142,7 @@ int ControlTransfer(IOUSBDeviceInterface320 **deviceInterface,
     request.pData = data;
     request.noDataTimeout = timeout;
     request.completionTimeout = timeout;
-    
+
     return (*deviceInterface)->DeviceRequestTO(deviceInterface, &request);
 }
 
@@ -167,7 +167,7 @@ int GetStringDescriptor(IOUSBDeviceInterface320 **deviceInterface,
     request.pData = buf;
     request.noDataTimeout = timeout;
     request.completionTimeout = timeout;
-    
+
     return (*deviceInterface)->DeviceRequestTO(deviceInterface, &request);
 }
 
@@ -245,7 +245,7 @@ int BulkTransferAsync(IOUSBInterfaceInterface300 **interfaceInterface,
                      UInt32 size,
                      void *context) {
     AsyncTransferContext *ctx = (AsyncTransferContext *)context;
-    return (*interfaceInterface)->WritePipeAsync(interfaceInterface, pipeRef, buf, size, 
+    return (*interfaceInterface)->WritePipeAsync(interfaceInterface, pipeRef, buf, size,
                                                  AsyncCallback, context);
 }
 
@@ -266,7 +266,7 @@ CFRunLoopSourceRef CreateInterfaceAsyncEventSource(IOUSBInterfaceInterface300 **
     return source;
 }
 
-// Create run loop source for device  
+// Create run loop source for device
 CFRunLoopSourceRef CreateDeviceAsyncEventSource(IOUSBDeviceInterface320 **deviceInterface) {
     CFRunLoopSourceRef source = NULL;
     (*deviceInterface)->CreateDeviceAsyncEventSource(deviceInterface, &source);
@@ -301,10 +301,10 @@ import (
 
 // IOKit constants
 const (
-	kIOReturnSuccess = 0
-	kIOUSBPipeStalled = int32(-536870897)
-	kIOReturnNotResponding = int32(-536870906)
-	kIOReturnNoDevice = int32(-536870208)
+	kIOReturnSuccess         = 0
+	kIOUSBPipeStalled        = int32(-536870897)
+	kIOReturnNotResponding   = int32(-536870906)
+	kIOReturnNoDevice        = int32(-536870208)
 	kIOReturnExclusiveAccess = int32(-536870203)
 	kIOUSBTransactionTimeout = int32(-536870899)
 )
@@ -314,7 +314,7 @@ type IOUSBDeviceInterface struct {
 	ptr **C.IOUSBDeviceInterface320
 }
 
-// IOUSBInterfaceInterface wraps the C IOUSBInterfaceInterface300  
+// IOUSBInterfaceInterface wraps the C IOUSBInterfaceInterface300
 type IOUSBInterfaceInterface struct {
 	ptr **C.IOUSBInterfaceInterface300
 }
@@ -402,7 +402,7 @@ func (d *IOUSBDeviceInterface) GetDeviceDescriptor() (*DeviceDescriptor, error) 
 	if ret != kIOReturnSuccess {
 		return nil, fmt.Errorf("failed to get device descriptor: 0x%x", ret)
 	}
-	
+
 	return &DeviceDescriptor{
 		Length:            uint8(desc.bLength),
 		DescriptorType:    uint8(desc.bDescriptorType),
@@ -427,7 +427,7 @@ func (d *IOUSBDeviceInterface) ControlTransfer(bmRequestType, bRequest uint8, wV
 	if len(data) > 0 {
 		ptr = unsafe.Pointer(&data[0])
 	}
-	
+
 	ret := C.ControlTransfer(d.ptr,
 		C.UInt8(bmRequestType),
 		C.UInt8(bRequest),
@@ -436,11 +436,11 @@ func (d *IOUSBDeviceInterface) ControlTransfer(bmRequestType, bRequest uint8, wV
 		ptr,
 		C.UInt16(len(data)),
 		C.UInt32(timeout))
-	
+
 	if ret != kIOReturnSuccess {
 		return 0, fmt.Errorf("control transfer failed: 0x%x", ret)
 	}
-	
+
 	return len(data), nil
 }
 
@@ -456,28 +456,28 @@ func (d *IOUSBDeviceInterface) ResetDevice() error {
 // GetStringDescriptor retrieves a string descriptor
 func (d *IOUSBDeviceInterface) GetStringDescriptor(index uint8, langID uint16) (string, error) {
 	buf := make([]byte, 256)
-	ret := C.GetStringDescriptor(d.ptr, C.UInt8(index), C.UInt16(langID), 
+	ret := C.GetStringDescriptor(d.ptr, C.UInt8(index), C.UInt16(langID),
 		unsafe.Pointer(&buf[0]), C.UInt16(len(buf)), C.UInt32(5000))
-	
+
 	if ret != kIOReturnSuccess {
 		return "", fmt.Errorf("failed to get string descriptor: 0x%x", ret)
 	}
-	
+
 	// Parse USB string descriptor format
 	if len(buf) < 2 {
 		return "", fmt.Errorf("invalid string descriptor")
 	}
-	
+
 	length := int(buf[0])
 	if length < 2 || length > len(buf) {
 		return "", fmt.Errorf("invalid string descriptor length")
 	}
-	
+
 	// USB strings are UTF-16LE, starting at byte 2
 	if length <= 2 {
 		return "", nil
 	}
-	
+
 	// Convert UTF-16LE to string
 	strBytes := buf[2:length]
 	runes := make([]rune, 0, len(strBytes)/2)
@@ -487,7 +487,7 @@ func (d *IOUSBDeviceInterface) GetStringDescriptor(index uint8, langID uint16) (
 			runes = append(runes, r)
 		}
 	}
-	
+
 	return string(runes), nil
 }
 
@@ -533,7 +533,7 @@ func (i *IOUSBInterfaceInterface) ClearPipeStall(pipeRef uint8) error {
 func (i *IOUSBInterfaceInterface) BulkTransferOut(pipeRef uint8, data []byte, timeout uint32) (int, error) {
 	size := C.UInt32(len(data))
 	ret := C.BulkTransfer(i.ptr, C.UInt8(pipeRef), unsafe.Pointer(&data[0]), &size, C.UInt32(timeout))
-	
+
 	if ret != kIOReturnSuccess {
 		if int32(ret) == kIOUSBPipeStalled {
 			return int(size), fmt.Errorf("pipe stalled")
@@ -543,7 +543,7 @@ func (i *IOUSBInterfaceInterface) BulkTransferOut(pipeRef uint8, data []byte, ti
 		}
 		return int(size), fmt.Errorf("bulk transfer failed: 0x%x", ret)
 	}
-	
+
 	return int(size), nil
 }
 
@@ -551,7 +551,7 @@ func (i *IOUSBInterfaceInterface) BulkTransferOut(pipeRef uint8, data []byte, ti
 func (i *IOUSBInterfaceInterface) BulkTransferIn(pipeRef uint8, data []byte, timeout uint32) (int, error) {
 	size := C.UInt32(len(data))
 	ret := C.BulkTransferRead(i.ptr, C.UInt8(pipeRef), unsafe.Pointer(&data[0]), &size, C.UInt32(timeout))
-	
+
 	if ret != kIOReturnSuccess {
 		if int32(ret) == kIOUSBPipeStalled {
 			return int(size), fmt.Errorf("pipe stalled")
@@ -561,7 +561,7 @@ func (i *IOUSBInterfaceInterface) BulkTransferIn(pipeRef uint8, data []byte, tim
 		}
 		return int(size), fmt.Errorf("bulk transfer failed: 0x%x", ret)
 	}
-	
+
 	return int(size), nil
 }
 
@@ -581,46 +581,46 @@ func (i *IOUSBInterfaceInterface) BulkTransferOutAsync(pipeRef uint8, data []byt
 		Size:     uint32(len(data)),
 		Callback: callback,
 	}
-	
+
 	// Allocate C context
 	ctx.cContext = (*C.AsyncTransferContext)(C.malloc(C.sizeof_AsyncTransferContext))
 	ctx.cContext.buffer = unsafe.Pointer(&data[0])
 	ctx.cContext.size = C.UInt32(len(data))
 	ctx.cContext.userData = unsafe.Pointer(ctx)
-	
-	ret := C.BulkTransferAsync(i.ptr, C.UInt8(pipeRef), unsafe.Pointer(&data[0]), 
+
+	ret := C.BulkTransferAsync(i.ptr, C.UInt8(pipeRef), unsafe.Pointer(&data[0]),
 		C.UInt32(len(data)), unsafe.Pointer(ctx.cContext))
-	
+
 	if ret != kIOReturnSuccess {
 		C.free(unsafe.Pointer(ctx.cContext))
 		return fmt.Errorf("async bulk transfer failed: 0x%x", ret)
 	}
-	
+
 	return nil
 }
 
-// BulkTransferInAsync performs an async bulk IN transfer  
+// BulkTransferInAsync performs an async bulk IN transfer
 func (i *IOUSBInterfaceInterface) BulkTransferInAsync(pipeRef uint8, data []byte, callback func(result int32, bytesTransferred uint32)) error {
 	ctx := &AsyncTransferContext{
 		Buffer:   data,
 		Size:     uint32(len(data)),
 		Callback: callback,
 	}
-	
+
 	// Allocate C context
 	ctx.cContext = (*C.AsyncTransferContext)(C.malloc(C.sizeof_AsyncTransferContext))
 	ctx.cContext.buffer = unsafe.Pointer(&data[0])
 	ctx.cContext.size = C.UInt32(len(data))
 	ctx.cContext.userData = unsafe.Pointer(ctx)
-	
+
 	ret := C.BulkTransferReadAsync(i.ptr, C.UInt8(pipeRef), unsafe.Pointer(&data[0]),
 		C.UInt32(len(data)), unsafe.Pointer(ctx.cContext))
-	
+
 	if ret != kIOReturnSuccess {
 		C.free(unsafe.Pointer(ctx.cContext))
 		return fmt.Errorf("async bulk transfer failed: 0x%x", ret)
 	}
-	
+
 	return nil
 }
 
