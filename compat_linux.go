@@ -1,6 +1,64 @@
 package usb
 
+import (
+	"regexp"
+)
+
 // Compatibility methods for Linux to match cross-platform API
+
+// DeviceList returns a list of all USB devices on the system.
+// This uses sysfs enumeration on Linux.
+func DeviceList() ([]*Device, error) {
+	enum := NewSysfsEnumerator()
+	sysfsDevices, err := enum.EnumerateDevices()
+	if err != nil {
+		return nil, err
+	}
+
+	devices := make([]*Device, len(sysfsDevices))
+	for i, sd := range sysfsDevices {
+		devices[i] = sd.ToUSBDevice()
+	}
+	return devices, nil
+}
+
+// OpenDevice opens a USB device by vendor ID and product ID.
+// Returns the first matching device found.
+func OpenDevice(vid, pid uint16) (*DeviceHandle, error) {
+	devices, err := DeviceList()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, dev := range devices {
+		if dev.Descriptor.VendorID == vid && dev.Descriptor.ProductID == pid {
+			return dev.Open()
+		}
+	}
+	return nil, ErrDeviceNotFound
+}
+
+// devicePathRegex matches valid USB device paths like /dev/bus/usb/001/002
+var devicePathRegex = regexp.MustCompile(`^/dev/bus/usb/(\d{3})/(\d{3})$`)
+
+// IsValidDevicePath checks if the given path is a valid USB device path.
+func IsValidDevicePath(path string) bool {
+	matches := devicePathRegex.FindStringSubmatch(path)
+	if matches == nil {
+		return false
+	}
+	// Bus and address must be 001-255 (not 000 or >255)
+	// The regex ensures 3 digits, but we need to check the value
+	bus := 0
+	addr := 0
+	for _, c := range matches[1] {
+		bus = bus*10 + int(c-'0')
+	}
+	for _, c := range matches[2] {
+		addr = addr*10 + int(c-'0')
+	}
+	return bus >= 1 && bus <= 255 && addr >= 1 && addr <= 255
+}
 
 // GetConfiguration gets the current device configuration
 func (h *DeviceHandle) GetConfiguration() (int, error) {
