@@ -25,6 +25,11 @@ const (
 	USBDEVFS_URB_NO_INTERRUPT      = 0x80
 )
 
+// MAX_BULK_BUFFER_LENGTH matches libusb's limit and the Linux kernel's
+// MAX_USBFS_BUFFER_SIZE (drivers/usb/core/devio.c). Exceeding this can
+// cause ENOMEM on URB submission, especially on Android/ARM platforms.
+const MAX_BULK_BUFFER_LENGTH = 16384
+
 // IsoPacketDescriptor represents a single isochronous packet
 type IsoPacketDescriptor struct {
 	Length       uint32
