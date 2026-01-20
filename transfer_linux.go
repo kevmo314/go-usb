@@ -2,28 +2,11 @@ package usb
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"sync"
 	"syscall"
 	"time"
 	"unsafe"
-)
-
-// Common USB errors
-var (
-	ErrInvalidParameter = errors.New("invalid parameter")
-	ErrIO               = errors.New("I/O error")
-	ErrNoDevice         = errors.New("no device")
-	ErrNotFound         = errors.New("not found")
-	ErrBusy             = errors.New("busy")
-	ErrTimeout          = errors.New("timeout")
-	ErrOverflow         = errors.New("overflow")
-	ErrPipe             = errors.New("pipe error")
-	ErrInterrupted      = errors.New("interrupted")
-	ErrNoMem            = errors.New("no memory")
-	ErrNotSupported     = errors.New("not supported")
-	ErrOther            = errors.New("other error")
 )
 
 type Transfer struct {
@@ -41,29 +24,6 @@ type Transfer struct {
 }
 
 type TransferCallback func(transfer *Transfer)
-
-// Transfer types
-type TransferType int
-
-const (
-	TransferTypeControl TransferType = iota
-	TransferTypeIsochronous
-	TransferTypeBulk
-	TransferTypeInterrupt
-)
-
-type TransferStatus int
-
-const (
-	TransferCompleted TransferStatus = iota
-	TransferError
-	TransferTimedOut
-	TransferCancelled
-	TransferStall
-	TransferNoDevice
-	TransferOverflow
-	TransferInProgress
-)
 
 func (h *DeviceHandle) ControlTransfer(requestType, request uint8, value, index uint16, data []byte, timeout time.Duration) (int, error) {
 	h.mu.RLock()

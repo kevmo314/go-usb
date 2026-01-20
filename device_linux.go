@@ -63,6 +63,7 @@ type DeviceHandle struct {
 	reapMutex sync.Mutex
 	reapMap   map[uintptr]func(error) // URB ptr -> completion callback
 	reaping   bool                    // Is reaper running?
+	reapDone  chan struct{}           // Signals reaper has stopped
 }
 
 func (d *Device) Open() (*DeviceHandle, error) {
@@ -85,20 +86,27 @@ func (d *Device) Open() (*DeviceHandle, error) {
 
 func (h *DeviceHandle) Close() error {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	if h.closed {
+		h.mu.Unlock()
 		return nil
 	}
+	h.closed = true
+	reapDone := h.reapDone
+	h.mu.Unlock()
+
+	// Wait for reaper to stop (it checks h.closed)
+	if reapDone != nil {
+		<-reapDone
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	for iface := range h.claimedIfaces {
 		h.releaseInterfaceInternal(iface)
 	}
 
-	err := syscall.Close(h.fd)
-	h.closed = true
-
-	return err
+	return syscall.Close(h.fd)
 }
 
 // registerURBCompletion registers a URB for completion notification
@@ -112,12 +120,19 @@ func (h *DeviceHandle) registerURBCompletion(urbPtr uintptr, callback func(error
 	// Start reaper if not already running
 	if !h.reaping {
 		h.reaping = true
+		h.reapDone = make(chan struct{})
 		go h.reapLoop()
 	}
 }
 
 // reapLoop continuously reaps completed URBs and notifies waiting transfers
 func (h *DeviceHandle) reapLoop() {
+	defer func() {
+		if h.reapDone != nil {
+			close(h.reapDone)
+		}
+	}()
+
 	for {
 		// Check if handle is closed
 		h.mu.RLock()
@@ -162,7 +177,9 @@ func (h *DeviceHandle) reapLoop() {
 		h.reapMutex.Lock()
 		callback, ok := h.reapMap[uintptr(unsafe.Pointer(reapedURB))]
 		if !ok {
-			panic("reapLoop: no callback for reaped URB")
+			// URB was reaped but not registered - can happen during shutdown
+			h.reapMutex.Unlock()
+			continue
 		}
 		delete(h.reapMap, uintptr(unsafe.Pointer(reapedURB)))
 		h.reapMutex.Unlock()
@@ -1013,6 +1030,12 @@ func (h *DeviceHandle) SetTestMode(testMode uint8) error {
 
 func (h *DeviceHandle) Device() *Device {
 	return h.device
+}
+
+// Fd returns the file descriptor for advanced operations (URB submission, etc.)
+// The caller should not close this file descriptor.
+func (h *DeviceHandle) Fd() int {
+	return h.fd
 }
 
 func (h *DeviceHandle) StringDescriptor(index uint8) (string, error) {

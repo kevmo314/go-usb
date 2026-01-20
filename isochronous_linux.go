@@ -323,3 +323,153 @@ func (t *IsochronousTransfer) IsoPacketBufferSlices() [][]byte {
 
 	return slices
 }
+
+// AsyncBulkTransfer represents an asynchronous bulk transfer using URBs.
+// This allows queuing multiple transfers to keep the USB pipeline full.
+type AsyncBulkTransfer struct {
+	handle   *DeviceHandle
+	endpoint uint8
+	buffer   []byte
+	urb      *URB
+
+	// Auto-reaping support
+	reapErr  error
+	reaped   bool
+	reapCond *sync.Cond
+}
+
+// NewAsyncBulkTransfer creates a new async bulk transfer for the given endpoint.
+// The buffer size determines how much data can be received in a single transfer.
+func (h *DeviceHandle) NewAsyncBulkTransfer(endpoint uint8, bufferSize int) (*AsyncBulkTransfer, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.closed {
+		return nil, ErrDeviceNotFound
+	}
+
+	// Allocate buffer
+	buffer := make([]byte, bufferSize)
+
+	// Create URB (no packet descriptors needed for bulk)
+	urb := &URB{
+		Type:         USBDEVFS_URB_TYPE_BULK,
+		Endpoint:     endpoint,
+		Buffer:       unsafe.Pointer(&buffer[0]),
+		BufferLength: int32(bufferSize),
+	}
+
+	return &AsyncBulkTransfer{
+		handle:   h,
+		endpoint: endpoint,
+		buffer:   buffer,
+		urb:      urb,
+		reapCond: sync.NewCond(&sync.Mutex{}),
+	}, nil
+}
+
+// Submit submits the bulk transfer to the kernel.
+func (t *AsyncBulkTransfer) Submit() error {
+	t.reapCond.L.Lock()
+	if t.urb.Status != 0 && !t.reaped {
+		t.reapCond.L.Unlock()
+		return fmt.Errorf("transfer already submitted")
+	}
+	t.reapCond.L.Unlock()
+
+	t.handle.mu.RLock()
+	defer t.handle.mu.RUnlock()
+
+	if t.handle.closed {
+		return ErrDeviceNotFound
+	}
+
+	// Reset URB fields for resubmission
+	t.urb.Status = 0
+	t.urb.ActualLength = 0
+
+	// Submit URB to kernel
+	_, _, errno := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(t.handle.fd),
+		USBDEVFS_SUBMITURB,
+		uintptr(unsafe.Pointer(t.urb)),
+	)
+
+	if errno != 0 {
+		return fmt.Errorf("failed to submit bulk URB: %v", errno)
+	}
+
+	t.reapCond.L.Lock()
+	t.reaped = false
+	t.reapCond.L.Unlock()
+
+	// Register with centralized reaper
+	t.handle.registerURBCompletion(uintptr(unsafe.Pointer(t.urb)), func(err error) {
+		t.reapCond.L.Lock()
+		defer t.reapCond.L.Unlock()
+
+		t.reapErr = err
+		t.reaped = true
+		t.reapCond.Broadcast()
+	})
+
+	return nil
+}
+
+// Wait waits for the transfer to complete and returns the result.
+func (t *AsyncBulkTransfer) Wait() ([]byte, error) {
+	t.reapCond.L.Lock()
+	for !t.reaped {
+		t.reapCond.Wait()
+	}
+	t.reapCond.L.Unlock()
+
+	if t.reapErr != nil {
+		return nil, t.reapErr
+	}
+
+	if t.urb.Status != 0 {
+		return nil, fmt.Errorf("bulk transfer failed with status: %d", t.urb.Status)
+	}
+
+	return t.buffer[:t.urb.ActualLength], nil
+}
+
+// Cancel cancels a submitted transfer.
+func (t *AsyncBulkTransfer) Cancel() error {
+	t.handle.mu.RLock()
+	defer t.handle.mu.RUnlock()
+
+	if t.handle.closed {
+		return ErrDeviceNotFound
+	}
+
+	_, _, errno := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(t.handle.fd),
+		USBDEVFS_DISCARDURB,
+		uintptr(unsafe.Pointer(t.urb)),
+	)
+
+	if errno != 0 && errno != syscall.EINVAL {
+		return fmt.Errorf("failed to cancel URB: %v", errno)
+	}
+
+	return nil
+}
+
+// ActualLength returns the number of bytes actually transferred.
+func (t *AsyncBulkTransfer) ActualLength() int {
+	t.reapCond.L.Lock()
+	for !t.reaped {
+		t.reapCond.Wait()
+	}
+	t.reapCond.L.Unlock()
+	return int(t.urb.ActualLength)
+}
+
+// Buffer returns the transfer buffer (valid data up to ActualLength).
+func (t *AsyncBulkTransfer) Buffer() []byte {
+	return t.buffer
+}
