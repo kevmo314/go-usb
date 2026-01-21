@@ -291,6 +291,13 @@ func (h *DeviceHandle) RawConfigDescriptor(index uint8) ([]byte, error) {
 	return fullBuf, nil
 }
 
+// usbfsDisconnectClaim matches the kernel's usbfs_disconnect_claim struct
+type usbfsDisconnectClaim struct {
+	Interface uint32
+	Flags     uint32
+	Driver    [256]byte
+}
+
 func (h *DeviceHandle) ClaimInterface(iface uint8) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -303,15 +310,34 @@ func (h *DeviceHandle) ClaimInterface(iface uint8) error {
 		return nil
 	}
 
-	ifaceNum := uint32(iface)
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(h.fd), USBDEVFS_CLAIMINTERFACE, uintptr(unsafe.Pointer(&ifaceNum)))
-	if errno != 0 {
-		return errno
+	// Use DISCONNECT_CLAIM with EXCEPT_DRIVER flag to atomically disconnect
+	// competing drivers and claim. This matches libusb's behavior.
+	dc := usbfsDisconnectClaim{
+		Interface: uint32(iface),
+		Flags:     0x02, // USBFS_DISCONNECT_CLAIM_EXCEPT_DRIVER
+	}
+	copy(dc.Driver[:], "usbfs")
+
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(h.fd), USBDEVFS_DISCONNECT_CLAIM, uintptr(unsafe.Pointer(&dc)))
+	if errno == 0 {
+		h.claimedIfaces[iface] = true
+		return nil
 	}
 
-	h.claimedIfaces[iface] = true
-	return nil
+	// Fallback to simple claim if DISCONNECT_CLAIM not supported
+	if errno == syscall.ENOTTY || errno == syscall.EINVAL {
+		ifaceNum := uint32(iface)
+		_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, uintptr(h.fd), USBDEVFS_CLAIMINTERFACE, uintptr(unsafe.Pointer(&ifaceNum)))
+		if errno != 0 {
+			return errno
+		}
+		h.claimedIfaces[iface] = true
+		return nil
+	}
+
+	return errno
 }
+
 
 func (h *DeviceHandle) ReleaseInterface(iface uint8) error {
 	h.mu.Lock()
@@ -392,44 +418,19 @@ func (h *DeviceHandle) DetachKernelDriver(iface uint8) error {
 		return ErrDeviceNotFound
 	}
 
-	// First try simple USBDEVFS_DISCONNECT
-	disconnectIface := struct {
-		Interface uint32
-		Flags     uint32
-		Driver    [256]int8
-	}{
-		Interface: uint32(iface),
-		Flags:     0x01, // USBDEVFS_DISCONNECT_CLAIM_IF_DRIVER - disconnect and claim
-	}
-
-	// Try DISCONNECT_CLAIM first (newer, more reliable)
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(h.fd), USBDEVFS_DISCONNECT_CLAIM, uintptr(unsafe.Pointer(&disconnectIface)))
-	if errno == 0 {
-		return nil // Success
-	}
-	// If DISCONNECT_CLAIM fails with ENOTTY, the kernel doesn't support it
-	// If it fails with EINVAL, the structure might be wrong
-	// If it fails with ENOENT, no driver is attached
-
-	// Fallback to simple DISCONNECT (older method)
+	// Use USBDEVFS_DISCONNECT to detach kernel driver (matches libusb)
 	ifaceNum := uint32(iface)
-	_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, uintptr(h.fd), USBDEVFS_DISCONNECT, uintptr(unsafe.Pointer(&ifaceNum)))
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(h.fd), USBDEVFS_DISCONNECT, uintptr(unsafe.Pointer(&ifaceNum)))
 	if errno != 0 {
-		// ENODATA means no driver was attached (not an error)
-		// EINVAL means the interface doesn't exist
-		// ENOTTY means the device doesn't support this ioctl
-		if errno == syscall.ENODATA || errno == syscall.ENOENT {
+		if errno == syscall.ENODATA || errno == syscall.ENOENT || errno == syscall.ENOTTY {
 			return nil
-		}
-		if errno == syscall.ENOTTY {
-			// Device doesn't support disconnect - might not have a kernel driver
-			return fmt.Errorf("device doesn't support driver detachment")
 		}
 		return errno
 	}
 
 	return nil
 }
+
 
 func (h *DeviceHandle) AttachKernelDriver(iface uint8) error {
 	h.mu.Lock()
