@@ -25,6 +25,9 @@ const (
 	USBDEVFS_URB_NO_INTERRUPT      = 0x80
 )
 
+// MAX_BULK_BUFFER_LENGTH matches libusb's limit to avoid kernel memory issues on Android
+const MAX_BULK_BUFFER_LENGTH = 16384
+
 // IsoPacketDescriptor represents a single isochronous packet
 type IsoPacketDescriptor struct {
 	Length       uint32
@@ -346,6 +349,11 @@ func (h *DeviceHandle) NewAsyncBulkTransfer(endpoint uint8, bufferSize int) (*As
 
 	if h.closed {
 		return nil, ErrDeviceNotFound
+	}
+
+	// Cap buffer size to avoid ENOMEM on Android/limited systems
+	if bufferSize > MAX_BULK_BUFFER_LENGTH {
+		bufferSize = MAX_BULK_BUFFER_LENGTH
 	}
 
 	// Allocate buffer
