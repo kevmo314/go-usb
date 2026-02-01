@@ -93,7 +93,21 @@ func (h *DeviceHandle) Close() error {
 	reapDone := h.reapDone
 	h.mu.Unlock()
 
-	// Wait for reaper to stop (it checks h.closed)
+	// Cancel all pending URBs so REAPURB unblocks in the reap loop.
+	// Without this, Close() deadlocks if the reap loop is blocked on REAPURB
+	// and no more URB completions will arrive (e.g., programmatic close without
+	// USB disconnect).
+	h.reapMutex.Lock()
+	for urbPtr := range h.reapMap {
+		syscall.Syscall(
+			syscall.SYS_IOCTL,
+			uintptr(h.fd),
+			USBDEVFS_DISCARDURB,
+			urbPtr,
+		)
+	}
+	h.reapMutex.Unlock()
+
 	if reapDone != nil {
 		<-reapDone
 	}
